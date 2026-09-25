@@ -1,0 +1,50 @@
+# ---- Secrets (NEVER commit) ----
+.env
+backend/.env
+*.env
+!.env.example
+!backend/.env.example
+
+# OAuth / credentials
+credentials.json
+token.json
+*.pem
+secrets/
+backend/secrets/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# ---- Node / frontend ----
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+
+# ---- Databases / dumps ----
+*.sqlite3
+*.db
+pgdata/
+*.dump
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ---- Docker ----
+docker-data/

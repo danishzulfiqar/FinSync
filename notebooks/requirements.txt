@@ -1,0 +1,6 @@
+# Notebook dependencies for FinSync step-by-step exploration.
+# Install into the backend venv so notebooks can import the `app` package:
+#   cd backend && source .venv/bin/activate
+#   pip install -r ../notebooks/requirements.txt
+ipykernel==6.29.5
+pandas==2.2.3

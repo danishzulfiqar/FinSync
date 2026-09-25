@@ -1,0 +1,150 @@
+"""Application configuration loaded from environment variables and providers.yaml."""
+
+from __future__ import annotations
+
+import re
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+import yaml
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+
+class Settings(BaseSettings):
+    """Environment-driven settings. See backend/.env.example for documentation."""
+
+    model_config = SettingsConfigDict(
+        env_file=str(BACKEND_DIR / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # App
+    app_env: str = "development"
+    log_level: str = "INFO"
+    api_v1_prefix: str = "/api/v1"
+
+    # Database
+    database_url: str = "postgresql+psycopg://finsync:finsync@localhost:5432/finsync"
+
+    # SMS webhook
+    sms_webhook_signing_key: str = "change-me"
+    sms_webhook_max_skew_seconds: int = 300
+    hbl_sms_senders: str = ""
+
+    # Gmail
+    gmail_client_secret_file: str = "secrets/gmail_client_secret.json"
+    gmail_token_file: str = "secrets/gmail_token.json"
+    gmail_scopes: str = "https://www.googleapis.com/auth/gmail.readonly"
+    gmail_oauth_redirect_uri: str = "http://localhost:8765/oauth2callback"
+
+    # Providers config
+    providers_config_file: str = "providers.yaml"
+
+    # Deduplication
+    dedup_time_window_seconds: int = 180
+    dedup_probable_enabled: bool = True
+
+    @property
+    def gmail_scope_list(self) -> list[str]:
+        return [s.strip() for s in self.gmail_scopes.split(",") if s.strip()]
+
+    @property
+    def hbl_sms_sender_list(self) -> list[str]:
+        return [s.strip() for s in self.hbl_sms_senders.split(",") if s.strip()]
+
+    def resolve_path(self, value: str) -> Path:
+        """Resolve a config path relative to the backend directory if not absolute."""
+        p = Path(value)
+        return p if p.is_absolute() else BACKEND_DIR / p
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+# ---------------------------------------------------------------------------
+# providers.yaml loading
+# ---------------------------------------------------------------------------
+
+
+class ProviderConfig:
+    """Compiled matching rules for a single provider."""
+
+    def __init__(self, key: str, raw: dict[str, Any]) -> None:
+        self.key = key
+        self.display_name: str = raw.get("display_name", key.upper())
+        self.default_currency: str = raw.get("default_currency", "PKR")
+        self.email_senders: list[str] = [s.lower() for s in raw.get("email_senders", [])]
+        self.sms_senders: list[str] = [s.lower() for s in raw.get("sms_senders", [])]
+        self._email_subject = _compile(raw.get("email_subject_patterns", []))
+        self._email_body = _compile(raw.get("email_body_patterns", []))
+        self._sms_body = _compile(raw.get("sms_body_patterns", []))
+
+    def matches_email_sender(self, sender: str) -> bool:
+        s = (sender or "").lower()
+        return any(cand in s for cand in self.email_senders)
+
+    def matches_sms_sender(self, sender: str) -> bool:
+        s = (sender or "").lower()
+        return any(cand in s for cand in self.sms_senders)
+
+    def matches_email_content(self, subject: str, body: str) -> bool:
+        if not self._email_subject and not self._email_body:
+            return True
+        subj_ok = any(p.search(subject or "") for p in self._email_subject)
+        body_ok = any(p.search(body or "") for p in self._email_body)
+        return subj_ok or body_ok
+
+    def matches_sms_body(self, body: str) -> bool:
+        if not self._sms_body:
+            return True
+        return any(p.search(body or "") for p in self._sms_body)
+
+
+class CategoryRule:
+    def __init__(self, match: str, category: str) -> None:
+        self.match = match.lower()
+        self.category = category
+
+
+class ProvidersFile:
+    """Parsed representation of providers.yaml."""
+
+    def __init__(self, raw: dict[str, Any]) -> None:
+        self.providers: dict[str, ProviderConfig] = {
+            key: ProviderConfig(key, cfg) for key, cfg in (raw.get("providers") or {}).items()
+        }
+        cat = raw.get("categorization") or {}
+        self.default_category: str = cat.get("default_category", "Other")
+        self.category_rules: list[CategoryRule] = [
+            CategoryRule(r["match"], r["category"]) for r in (cat.get("rules") or [])
+        ]
+
+    def provider(self, key: str) -> ProviderConfig | None:
+        return self.providers.get(key.lower())
+
+
+def _compile(patterns: list[str]) -> list[re.Pattern[str]]:
+    compiled: list[re.Pattern[str]] = []
+    for pat in patterns:
+        try:
+            compiled.append(re.compile(pat, re.IGNORECASE))
+        except re.error:
+            # Skip invalid placeholder patterns rather than crashing at startup.
+            continue
+    return compiled
+
+
+@lru_cache
+def get_providers_config() -> ProvidersFile:
+    settings = get_settings()
+    path = settings.resolve_path(settings.providers_config_file)
+    with path.open("r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh) or {}
+    return ProvidersFile(raw)

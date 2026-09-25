@@ -1,0 +1,86 @@
+# ==========================================================================
+# Provider matching configuration.
+#
+# IMPORTANT: The sender addresses and subject/body patterns below are
+# PLACEHOLDERS. Replace them with your own anonymized real values after you
+# inspect your actual notification emails/SMS. The ingestion engine reads
+# this file at runtime, so you can change patterns WITHOUT touching code.
+#
+# Matching is intentionally forgiving:
+#   - email_senders / sms_senders: substring match (case-insensitive)
+#   - *_subject_patterns / *_body_patterns: Python regex (case-insensitive)
+# A message must match a sender AND (optionally) a pattern to be considered
+# a candidate transaction for that provider. Final decision is made by the
+# provider parser, which returns None for non-transaction messages.
+# ==========================================================================
+
+providers:
+  hbl:
+    display_name: "HBL"
+    default_currency: "PKR"
+    # HBL bank-transfer notifications arrive by email.
+    email_senders:
+      - "REPLACE_WITH_HBL_EMAIL_SENDER"        # e.g. "alerts@hbl.com"
+    email_subject_patterns:
+      - "REPLACE_WITH_HBL_SUBJECT_REGEX"        # e.g. "(?i)funds? transfer"
+    email_body_patterns: []
+    # HBL card/purchase notifications arrive by SMS.
+    sms_senders:
+      - "REPLACE_WITH_HBL_SMS_SENDER_ID"        # e.g. "HBL" or a short code
+    sms_body_patterns:
+      - "REPLACE_WITH_HBL_SMS_REGEX"            # e.g. "(?i)spent|purchase|debited"
+
+  abl:
+    display_name: "Allied Bank"
+    default_currency: "PKR"
+    email_senders:
+      - "REPLACE_WITH_ABL_EMAIL_SENDER"
+    email_subject_patterns:
+      - "REPLACE_WITH_ABL_SUBJECT_REGEX"
+    email_body_patterns: []
+    # ABL: no SMS ingestion required.
+    sms_senders: []
+    sms_body_patterns: []
+
+  nayapay:
+    display_name: "NayaPay"
+    default_currency: "PKR"
+    email_senders:
+      - "REPLACE_WITH_NAYAPAY_EMAIL_SENDER"
+    email_subject_patterns:
+      - "REPLACE_WITH_NAYAPAY_SUBJECT_REGEX"
+    email_body_patterns: []
+    # NayaPay: no SMS ingestion required.
+    sms_senders: []
+    sms_body_patterns: []
+
+# ==========================================================================
+# Deterministic categorization rules (no LLM). Keys are matched as
+# case-insensitive substrings against merchant + description. First match wins,
+# evaluated top-to-bottom. Add your own merchants freely.
+# ==========================================================================
+categorization:
+  default_category: "Other"
+  rules:
+    - match: "indrive"
+      category: "Transport"
+    - match: "careem"
+      category: "Transport"
+    - match: "uber"
+      category: "Transport"
+    - match: "foodpanda"
+      category: "Food"
+    - match: "netflix"
+      category: "Subscriptions"
+    - match: "spotify"
+      category: "Subscriptions"
+    - match: "youtube premium"
+      category: "Subscriptions"
+    - match: "k-electric"
+      category: "Utilities"
+    - match: "ssgc"
+      category: "Utilities"
+    - match: "atm"
+      category: "ATM/Cash"
+    - match: "salary"
+      category: "Salary"
