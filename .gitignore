@@ -39,6 +39,12 @@ yarn-error.log*
 pgdata/
 *.dump
 
+# ---- Notebooks ----
+.ipynb_checkpoints/
+# Redacted samples may still contain sensitive data — never commit them.
+notebooks/samples/*
+!notebooks/samples/.gitkeep
+
 # ---- OS / editor ----
 .DS_Store
 Thumbs.db
