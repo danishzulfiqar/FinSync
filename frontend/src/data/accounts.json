@@ -1,0 +1,32 @@
+[
+  {
+    "id": "acc_abl",
+    "name": "Allied Current",
+    "provider": "abl",
+    "type": "current",
+    "mask": "•••• 4821",
+    "openingBalance": 185000,
+    "currency": "PKR",
+    "color": "#0ea5e9"
+  },
+  {
+    "id": "acc_hbl",
+    "name": "HBL Savings",
+    "provider": "hbl",
+    "type": "savings",
+    "mask": "•••• 9037",
+    "openingBalance": 420000,
+    "currency": "PKR",
+    "color": "#16a34a"
+  },
+  {
+    "id": "acc_nayapay",
+    "name": "NayaPay Wallet",
+    "provider": "nayapay",
+    "type": "wallet",
+    "mask": "•••• 6612",
+    "openingBalance": 32000,
+    "currency": "PKR",
+    "color": "#7c3aed"
+  }
+]

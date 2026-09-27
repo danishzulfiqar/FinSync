@@ -1,0 +1,16 @@
+[
+  { "id": "salary", "name": "Salary", "group": "income", "color": "#16a34a", "budget": 0 },
+  { "id": "freelance", "name": "Freelance", "group": "income", "color": "#22c55e", "budget": 0 },
+  { "id": "groceries", "name": "Groceries", "group": "spending", "color": "#f97316", "budget": 45000 },
+  { "id": "dining", "name": "Dining & Cafes", "group": "spending", "color": "#ef4444", "budget": 25000 },
+  { "id": "transport", "name": "Fuel & Transport", "group": "spending", "color": "#0ea5e9", "budget": 20000 },
+  { "id": "utilities", "name": "Utilities & Bills", "group": "spending", "color": "#eab308", "budget": 30000 },
+  { "id": "rent", "name": "Rent", "group": "spending", "color": "#8b5cf6", "budget": 90000 },
+  { "id": "shopping", "name": "Shopping", "group": "spending", "color": "#ec4899", "budget": 20000 },
+  { "id": "health", "name": "Health & Pharmacy", "group": "spending", "color": "#14b8a6", "budget": 10000 },
+  { "id": "entertainment", "name": "Entertainment", "group": "spending", "color": "#f43f5e", "budget": 8000 },
+  { "id": "mobile", "name": "Mobile & Internet", "group": "spending", "color": "#3b82f6", "budget": 6000 },
+  { "id": "fees", "name": "Bank Fees", "group": "spending", "color": "#64748b", "budget": 2000 },
+  { "id": "transfer", "name": "Transfers", "group": "transfer", "color": "#94a3b8", "budget": 0 },
+  { "id": "other", "name": "Uncategorized", "group": "spending", "color": "#a3a3a3", "budget": 0 }
+]
