@@ -4,15 +4,59 @@ import { Transactions } from "./pages/Transactions";
 import { Accounts } from "./pages/Accounts";
 import { Categories } from "./pages/Categories";
 import { Upload } from "./pages/Upload";
+import { Login } from "./pages/Login";
+import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { useAuth } from "./context/AuthContext";
 
 export default function App() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="/transactions" element={<Transactions />} />
-      <Route path="/accounts" element={<Accounts />} />
-      <Route path="/categories" element={<Categories />} />
-      <Route path="/upload" element={<Upload />} />
+      <Route
+        path="/login"
+        element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
+      />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/transactions"
+        element={
+          <ProtectedRoute>
+            <Transactions />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/accounts"
+        element={
+          <ProtectedRoute>
+            <Accounts />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/categories"
+        element={
+          <ProtectedRoute>
+            <Categories />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/upload"
+        element={
+          <ProtectedRoute>
+            <Upload />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
