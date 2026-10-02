@@ -11,9 +11,6 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
-    # Free tier has no pre-deploy hook, so run migrations before starting the server.
-    # Render injects $PORT; bind to it instead of the Dockerfile's default 8000.
-    dockerCommand: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: APP_ENV
         value: production
