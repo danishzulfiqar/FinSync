@@ -5,15 +5,48 @@ import { Card } from "../components/ui/Card";
 import { TransactionsTable } from "../components/transactions/TransactionsTable";
 import { useAppData } from "../context/AppDataContext";
 import { formatCurrency } from "../lib/format";
-import type { Transaction } from "../types";
+import { signedAmount } from "../lib/analytics";
+import type { Account, Category, Transaction } from "../types";
 
 type Flow = "all" | "in" | "out";
 
-function exportCsv(rows: Transaction[]) {
-  const header = ["Date", "Description", "Merchant", "Category", "Account", "Type", "Amount"];
-  const body = rows.map((t) =>
-    [t.date, t.description, t.merchant, t.categoryId, t.accountId, t.type, t.amount]
-      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+function csvCell(v: unknown): string {
+  return `"${String(v ?? "").replace(/"/g, '""')}"`;
+}
+
+/** Same columns FinLens exports: date, account, description, category, type, debit, credit, amount, balance. */
+function exportCsv(
+  rows: Transaction[],
+  accounts: Account[],
+  categories: Category[]
+) {
+  const accById = new Map(accounts.map((a) => [a.id, a.name]));
+  const catById = new Map(categories.map((c) => [c.id, c.name]));
+  const header = [
+    "Date",
+    "Account",
+    "Description",
+    "Category",
+    "Type",
+    "Debit",
+    "Credit",
+    "Amount",
+    "Balance",
+  ];
+  // Oldest first, like a bank ledger.
+  const body = [...rows].reverse().map((t) =>
+    [
+      t.date.slice(0, 10),
+      accById.get(t.accountId) ?? "",
+      t.description,
+      catById.get(t.categoryId) ?? t.categoryId,
+      t.type === "credit" ? "Credit" : "Debit",
+      t.type === "debit" ? t.amount.toFixed(2) : "",
+      t.type === "credit" ? t.amount.toFixed(2) : "",
+      signedAmount(t).toFixed(2),
+      t.balanceAfter != null ? t.balanceAfter.toFixed(2) : "",
+    ]
+      .map(csvCell)
       .join(",")
   );
   const csv = [header.join(","), ...body].join("\n");
@@ -112,7 +145,7 @@ export function Transactions() {
               ))}
             </div>
             <button
-              onClick={() => exportCsv(filtered)}
+              onClick={() => exportCsv(filtered, accounts, categories)}
               className="btn-outline"
               title="Export CSV"
             >

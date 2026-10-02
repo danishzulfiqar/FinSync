@@ -1,0 +1,14 @@
+# Keep the image small and never ship local secrets or envs.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.env
+.env.*
+!.env.example
+secrets/
+*.sqlite3
+.git/
+.gitignore

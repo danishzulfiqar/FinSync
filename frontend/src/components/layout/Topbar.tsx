@@ -96,7 +96,7 @@ export function Topbar({
               {user?.name ?? "Guest"}
             </p>
             <p className="text-[11px] text-slate-400">
-              {user?.location ?? "Not signed in"}
+              {user?.email ?? "Not signed in"}
             </p>
           </div>
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">
@@ -114,7 +114,10 @@ export function Topbar({
               <p className="truncate text-xs text-slate-400">{user?.email}</p>
             </div>
             <button
-              onClick={() => setMenuOpen(false)}
+              onClick={() => {
+                setMenuOpen(false);
+                navigate("/profile");
+              }}
               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               <UserIcon className="h-4 w-4 text-slate-400" />

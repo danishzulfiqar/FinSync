@@ -2,77 +2,126 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { api, getToken, setToken, type ApiUser, type TokenResponse } from "../lib/api";
 
 export interface User {
+  id: number;
   name: string;
   email: string;
-  location: string;
+  createdAt: string;
 }
 
 interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
+  /** True while restoring an existing session on first load. */
+  initializing: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
+  updateProfile: (input: { name: string; email: string }) => Promise<void>;
+  changePassword: (current: string, next: string) => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const STORAGE_KEY = "finsync.user";
-
-function loadUser(): User | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as User) : null;
-  } catch {
-    return null;
-  }
+function toUser(u: ApiUser): User {
+  return { id: u.id, name: u.full_name, email: u.email, createdAt: u.created_at };
 }
 
-function persist(user: User | null) {
-  if (user) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-  else window.localStorage.removeItem(STORAGE_KEY);
-}
-
-/** Mock auth — accepts any non-empty credentials. Swap for a real API later. */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(loadUser);
+  const [user, setUser] = useState<User | null>(null);
+  const [initializing, setInitializing] = useState(true);
 
-  const login = useCallback(async (email: string, _password: string) => {
-    await new Promise((r) => setTimeout(r, 500));
-    const name = email
-      .split("@")[0]
-      .replace(/[._-]+/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
-    const next: User = { name: name || "Danish Z.", email, location: "Karachi, PK" };
-    setUser(next);
-    persist(next);
+  // Restore the session from a persisted token on first load.
+  useEffect(() => {
+    let cancelled = false;
+    async function restore() {
+      if (!getToken()) {
+        setInitializing(false);
+        return;
+      }
+      try {
+        const me = await api.get<ApiUser>("/auth/me");
+        if (!cancelled) setUser(toUser(me));
+      } catch {
+        setToken(null);
+      } finally {
+        if (!cancelled) setInitializing(false);
+      }
+    }
+    restore();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const data = await api.postForm<TokenResponse>(
+      "/auth/login",
+      { username: email, password },
+      { auth: false }
+    );
+    setToken(data.access_token);
+    setUser(toUser(data.user));
   }, []);
 
   const signup = useCallback(
-    async (name: string, email: string, _password: string) => {
-      await new Promise((r) => setTimeout(r, 600));
-      const next: User = { name, email, location: "Karachi, PK" };
-      setUser(next);
-      persist(next);
+    async (name: string, email: string, password: string) => {
+      const data = await api.post<TokenResponse>(
+        "/auth/register",
+        { full_name: name, email, password },
+        { auth: false }
+      );
+      setToken(data.access_token);
+      setUser(toUser(data.user));
     },
     []
   );
 
   const logout = useCallback(() => {
+    setToken(null);
     setUser(null);
-    persist(null);
   }, []);
 
+  const updateProfile = useCallback(
+    async (input: { name: string; email: string }) => {
+      const updated = await api.patch<ApiUser>("/auth/me", {
+        full_name: input.name,
+        email: input.email,
+      });
+      setUser(toUser(updated));
+    },
+    []
+  );
+
+  const changePassword = useCallback(
+    async (current: string, next: string) => {
+      await api.post<void>("/auth/change-password", {
+        current_password: current,
+        new_password: next,
+      });
+    },
+    []
+  );
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAuthenticated: !!user, login, signup, logout }),
-    [user, login, signup, logout]
+    () => ({
+      user,
+      isAuthenticated: !!user,
+      initializing,
+      login,
+      signup,
+      updateProfile,
+      changePassword,
+      logout,
+    }),
+    [user, initializing, login, signup, updateProfile, changePassword, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

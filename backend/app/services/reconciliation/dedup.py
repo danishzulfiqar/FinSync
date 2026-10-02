@@ -37,11 +37,14 @@ def find_duplicate(
     fingerprint: str,
     time_window_seconds: int = 180,
     probable_enabled: bool = True,
+    *,
+    user_id: int | None = None,
 ) -> DedupResult:
-    # 1. Exact fingerprint match.
-    existing = db.execute(
-        select(Transaction).where(Transaction.fingerprint == fingerprint)
-    ).scalar_one_or_none()
+    # 1. Exact fingerprint match (scoped to the owner when known).
+    exact_q = select(Transaction).where(Transaction.fingerprint == fingerprint)
+    if user_id is not None:
+        exact_q = exact_q.where(Transaction.user_id == user_id)
+    existing = db.execute(exact_q).scalar_one_or_none()
     if existing is not None:
         return DedupResult(DedupStatus.EXACT_DUPLICATE, existing)
 
@@ -51,16 +54,17 @@ def find_duplicate(
     # 2. Probable duplicate: same provider + type + amount within a time window.
     lo = tx.transaction_datetime - timedelta(seconds=time_window_seconds)
     hi = tx.transaction_datetime + timedelta(seconds=time_window_seconds)
-    candidate = db.execute(
-        select(Transaction).where(
-            Transaction.provider == tx.provider.value,
-            Transaction.transaction_type == tx.transaction_type.value,
-            Transaction.amount == tx.amount,
-            Transaction.transaction_datetime.is_not(None),
-            Transaction.transaction_datetime >= lo,
-            Transaction.transaction_datetime <= hi,
-        )
-    ).scalars().first()
+    probable_q = select(Transaction).where(
+        Transaction.provider == tx.provider.value,
+        Transaction.transaction_type == tx.transaction_type.value,
+        Transaction.amount == tx.amount,
+        Transaction.transaction_datetime.is_not(None),
+        Transaction.transaction_datetime >= lo,
+        Transaction.transaction_datetime <= hi,
+    )
+    if user_id is not None:
+        probable_q = probable_q.where(Transaction.user_id == user_id)
+    candidate = db.execute(probable_q).scalars().first()
 
     if candidate is None:
         return DedupResult(DedupStatus.UNIQUE)

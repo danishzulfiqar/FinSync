@@ -29,6 +29,8 @@ export interface Transaction {
   categoryId: string;
   /** Where the record came from. */
   source: "gmail" | "statement" | "manual";
+  /** Bank-printed running balance after this row (statements only). */
+  balanceAfter?: number | null;
   pending?: boolean;
 }
 

@@ -23,46 +23,70 @@ import { formatCurrency } from "../lib/format";
 import { PROVIDERS } from "../types";
 
 export function Dashboard() {
-  const { accounts, categories, transactions } = useAppData();
+  const { accounts, categories, transactions, loading, error } = useAppData();
   const kpis = computeKpis(transactions, accounts, categories);
   const flow = cashFlowByMonth(transactions, categories);
   const spending = spendingByCategory(transactions, categories);
-  const savingsRate =
-    kpis.income > 0 ? Math.round((kpis.net / kpis.income) * 100) : 0;
+  const savingsRate = Math.round(kpis.savingsRate);
+  const empty = !loading && !error && transactions.length === 0;
 
   return (
     <Layout
       title="Overview"
       subtitle="Your money across every account, in one place."
     >
+      {error && (
+        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+          {error}
+        </div>
+      )}
+      {empty && (
+        <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-200">
+          No transactions yet.{" "}
+          <Link to="/upload" className="font-semibold underline">
+            Import a bank statement
+          </Link>{" "}
+          to see your dashboard come alive.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Total balance"
           value={formatCurrency(kpis.balance)}
           icon={Wallet}
           accent="brand"
-          trend={{ value: `${accounts.length} accounts`, positive: true }}
+          trend={{
+            value: `${accounts.length} account${accounts.length === 1 ? "" : "s"} · ${kpis.months} month${kpis.months === 1 ? "" : "s"}`,
+            positive: true,
+          }}
         />
         <KpiCard
-          label="Income (period)"
+          label="Total income"
           value={formatCurrency(kpis.income)}
           icon={TrendingUp}
           accent="green"
-          trend={{ value: "+8.2%", positive: true }}
+          trend={{ value: `${kpis.count} transactions`, positive: true }}
         />
         <KpiCard
-          label="Spending (period)"
+          label="Total expense"
           value={formatCurrency(kpis.spending)}
           icon={TrendingDown}
           accent="red"
-          trend={{ value: "+3.1%", positive: false }}
+          trend={{
+            value: `avg ${formatCurrency(kpis.avgExpense)}`,
+            positive: false,
+          }}
         />
         <KpiCard
-          label="Net saved"
-          value={formatCurrency(kpis.net)}
+          label="Net"
+          value={formatCurrency(kpis.net, { signed: true })}
           icon={PiggyBank}
           accent="sky"
-          trend={{ value: `${savingsRate}% rate`, positive: savingsRate >= 0 }}
+          trend={{
+            value: `${savingsRate}% savings rate`,
+            positive: kpis.net >= 0,
+          }}
         />
       </div>
 
@@ -70,12 +94,12 @@ export function Dashboard() {
         <Card className="lg:col-span-2">
           <CardHeader
             title="Cash flow"
-            subtitle="Income vs spending by month"
+            subtitle="Income vs expense by month"
           />
           <CashFlowArea data={flow} />
         </Card>
         <Card>
-          <CardHeader title="Where money goes" subtitle="Spending by category" />
+          <CardHeader title="Where money goes" subtitle="Expense by category" />
           <SpendingDonut data={spending} />
         </Card>
       </div>
@@ -94,6 +118,11 @@ export function Dashboard() {
             }
           />
           <div className="space-y-3">
+            {accounts.length === 0 && (
+              <p className="py-6 text-center text-sm text-slate-400">
+                Accounts are created automatically when you import a statement.
+              </p>
+            )}
             {accounts.map((a) => {
               const provider = PROVIDERS[a.provider];
               return (

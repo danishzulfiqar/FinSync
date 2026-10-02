@@ -10,8 +10,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.transaction import Transaction
+from app.models.user import User
 
 router = APIRouter(tags=["export"])
 
@@ -36,16 +38,19 @@ def export_csv(
     provider: str | None = None,
     type: str | None = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
-    conditions = []
+    conditions = [Transaction.user_id == current_user.id]
     if provider:
         conditions.append(Transaction.provider == provider)
     if type:
         conditions.append(Transaction.transaction_type == type)
 
-    stmt = select(Transaction).options(selectinload(Transaction.sources))
-    if conditions:
-        stmt = stmt.where(*conditions)
+    stmt = (
+        select(Transaction)
+        .options(selectinload(Transaction.sources))
+        .where(*conditions)
+    )
     stmt = stmt.order_by(Transaction.transaction_datetime.desc().nullslast(), Transaction.id.desc())
 
     rows = db.execute(stmt).scalars().all()

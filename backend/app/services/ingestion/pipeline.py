@@ -37,14 +37,24 @@ def ingest_parsed_transaction(
     source_id: str,
     raw_hash: str,
     source_thread_id: str | None = None,
+    user_id: int | None = None,
+    account_id: int | None = None,
+    probable_enabled: bool | None = None,
+    fingerprint_extra: str | None = None,
 ) -> IngestResult:
     """Persist a parsed transaction idempotently.
 
     Returns without creating anything if the same source (by source_id or
     raw_hash) has already been ingested, making re-processing safe.
+
+    ``user_id``/``account_id`` attribute the record to its owner. Statement
+    import passes ``probable_enabled=False`` and a per-row ``fingerprint_extra``
+    so several legitimate rows sharing provider+type+amount+date are all kept.
     """
     settings = get_settings()
     providers = get_providers_config()
+    if probable_enabled is None:
+        probable_enabled = settings.dedup_probable_enabled
 
     # ---- Idempotency: has this exact source already been ingested? ----
     already = db.execute(
@@ -60,13 +70,19 @@ def ingest_parsed_transaction(
     if already is not None:
         return IngestResult("duplicate", already.transaction_id, "source already ingested")
 
-    fingerprint = compute_fingerprint(tx, settings.dedup_time_window_seconds)
+    fingerprint = compute_fingerprint(
+        tx,
+        settings.dedup_time_window_seconds,
+        user_id=user_id,
+        extra=fingerprint_extra,
+    )
     dedup = find_duplicate(
         db,
         tx,
         fingerprint,
         time_window_seconds=settings.dedup_time_window_seconds,
-        probable_enabled=settings.dedup_probable_enabled,
+        probable_enabled=probable_enabled,
+        user_id=user_id,
     )
 
     # ---- Attach source to an existing transaction (no new financial record) ----
@@ -115,6 +131,8 @@ def ingest_parsed_transaction(
         fingerprint=fingerprint,
         confidence=confidence,
         verified=verified,
+        user_id=user_id,
+        account_id=account_id,
     )
     db.add(transaction)
     db.flush()  # assign transaction.id

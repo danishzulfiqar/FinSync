@@ -8,9 +8,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.transaction import Transaction
-from app.schemas.transaction import TransactionListResponse, TransactionOut
+from app.models.user import User
+from app.schemas.transaction import (
+    TransactionListResponse,
+    TransactionOut,
+    TransactionUpdate,
+)
 
 router = APIRouter(tags=["transactions"])
 
@@ -28,8 +34,9 @@ def list_transactions(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> TransactionListResponse:
-    conditions = []
+    conditions = [Transaction.user_id == current_user.id]
     if provider:
         conditions.append(Transaction.provider == provider)
     if type:
@@ -71,12 +78,47 @@ def list_transactions(
 
 
 @router.get("/transactions/{transaction_id}", response_model=TransactionOut)
-def get_transaction(transaction_id: int, db: Session = Depends(get_db)) -> TransactionOut:
+def get_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TransactionOut:
     row = db.execute(
         select(Transaction)
         .options(selectinload(Transaction.sources))
-        .where(Transaction.id == transaction_id)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.user_id == current_user.id,
+        )
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
+    return TransactionOut.model_validate(row)
+
+
+@router.patch("/transactions/{transaction_id}", response_model=TransactionOut)
+def update_transaction(
+    transaction_id: int,
+    payload: TransactionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TransactionOut:
+    row = db.execute(
+        select(Transaction)
+        .options(selectinload(Transaction.sources))
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.user_id == current_user.id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
+
+    if payload.category is not None:
+        row.category = payload.category
+    if payload.verified is not None:
+        row.verified = payload.verified
+
+    db.commit()
+    db.refresh(row)
     return TransactionOut.model_validate(row)

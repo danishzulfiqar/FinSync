@@ -22,6 +22,7 @@ class TransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    account_id: int | None = None
     provider: str
     account_identifier: str | None = None
     transaction_type: str
@@ -39,6 +40,13 @@ class TransactionOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     sources: list[TransactionSourceOut] = []
+
+
+class TransactionUpdate(BaseModel):
+    """Editable fields on a transaction (ledger inline edits)."""
+
+    category: str | None = None
+    verified: bool | None = None
 
 
 class TransactionListResponse(BaseModel):

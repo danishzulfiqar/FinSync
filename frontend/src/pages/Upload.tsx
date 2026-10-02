@@ -6,100 +6,105 @@ import {
   Mail,
   Loader2,
   Trash2,
+  AlertTriangle,
+  ShieldCheck,
+  Lock,
 } from "lucide-react";
 import { Layout } from "../components/layout/Layout";
 import { Card, CardHeader } from "../components/ui/Card";
-import { TransactionsTable } from "../components/transactions/TransactionsTable";
+import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../context/AppDataContext";
-import { formatCurrency } from "../lib/format";
-import type { Transaction } from "../types";
+import {
+  api,
+  ApiError,
+  type StatementImportResponse,
+  type StatementFileResult,
+} from "../lib/api";
 
-/** Deterministic-ish synthetic "parsed" rows to mimic a statement import. */
-function synthesizeRows(accountId: string, fileName: string): Transaction[] {
-  const seed = [
-    { d: "Bykea ride", m: "Bykea", a: 540, c: "transport", t: "debit" },
-    { d: "Cheezious order", m: "Cheezious", a: 1890, c: "dining", t: "debit" },
-    { d: "Naheed store", m: "Naheed", a: 7650, c: "groceries", t: "debit" },
-    { d: "Salary top-up", m: "Employer", a: 45000, c: "salary", t: "credit" },
-    { d: "PSO fuel", m: "PSO", a: 6800, c: "transport", t: "debit" },
-    { d: "Outfitters", m: "Outfitters", a: 5200, c: "shopping", t: "debit" },
-  ] as const;
-  const stamp = Date.now().toString(36);
-  const base = new Date();
-  return seed.map((row, i) => {
-    const date = new Date(base);
-    date.setDate(base.getDate() - i * 2);
-    return {
-      id: `imp_${stamp}_${i}`,
-      accountId,
-      date: date.toISOString().slice(0, 10),
-      description: row.d,
-      merchant: row.m,
-      amount: row.a,
-      type: row.t,
-      categoryId: row.c,
-      source: fileName.toLowerCase().endsWith(".pdf") ? "statement" : "statement",
-    } satisfies Transaction;
-  });
+type Phase = "idle" | "working" | "preview" | "done";
+
+function buildForm(files: File[], password: string, dryRun: boolean): FormData {
+  const data = new FormData();
+  files.forEach((f) => data.append("files", f));
+  if (password) data.append("password", password);
+  data.append("dry_run", dryRun ? "true" : "false");
+  return data;
 }
 
 export function Upload() {
-  const { accounts, importTransactions } = useAppData();
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [parsing, setParsing] = useState(false);
-  const [rows, setRows] = useState<Transaction[]>([]);
-  const [imported, setImported] = useState(false);
+  const { refresh } = useAppData();
+  const [files, setFiles] = useState<File[]>([]);
+  const [password, setPassword] = useState("");
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [result, setResult] = useState<StatementImportResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function handleFile(file?: File) {
-    if (!file) return;
-    setFileName(file.name);
-    setImported(false);
-    setParsing(true);
-    setRows([]);
-    window.setTimeout(() => {
-      setRows(synthesizeRows(accountId, file.name));
-      setParsing(false);
-    }, 900);
+  function addFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    const pdfs = Array.from(list).filter((f) =>
+      f.name.toLowerCase().endsWith(".pdf")
+    );
+    if (pdfs.length === 0) {
+      setError("Please upload PDF bank statements (ABL / HBL).");
+      return;
+    }
+    setError(null);
+    setResult(null);
+    setPhase("idle");
+    setFiles((prev) => {
+      const names = new Set(prev.map((f) => f.name));
+      return [...prev, ...pdfs.filter((f) => !names.has(f.name))];
+    });
   }
 
-  function confirmImport() {
-    importTransactions(rows);
-    setImported(true);
-    setRows([]);
-    setFileName(null);
+  function removeFile(name: string) {
+    setFiles((prev) => prev.filter((f) => f.name !== name));
   }
 
-  const previewTotal = rows.reduce(
-    (s, r) => s + (r.type === "credit" ? r.amount : -r.amount),
-    0
-  );
+  async function run(dryRun: boolean) {
+    if (files.length === 0) return;
+    setPhase("working");
+    setError(null);
+    try {
+      const res = await api.upload<StatementImportResponse>(
+        "/statements/upload",
+        buildForm(files, password, dryRun)
+      );
+      setResult(res);
+      setPhase(dryRun ? "preview" : "done");
+      if (!dryRun) {
+        setFiles([]);
+        void refresh();
+      }
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Something went wrong while processing your statement."
+      );
+      setPhase("idle");
+    }
+  }
+
+  function reset() {
+    setFiles([]);
+    setPassword("");
+    setResult(null);
+    setError(null);
+    setPhase("idle");
+  }
+
+  const busy = phase === "working";
 
   return (
-    <Layout
-      title="Import data"
-      subtitle="Upload statements or pull from Gmail"
-    >
+    <Layout title="Import data" subtitle="Upload statements or pull from Gmail">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
             title="Upload bank statement"
-            subtitle="PDF or CSV from ABL, HBL or NayaPay"
-            action={
-              <select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="input w-auto py-1.5 text-xs"
-              >
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            }
+            subtitle="Password-protected PDFs from Allied Bank (myABL) or HBL"
           />
 
           <div
@@ -111,10 +116,10 @@ export function Upload() {
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              handleFile(e.dataTransfer.files[0]);
+              addFiles(e.dataTransfer.files);
             }}
             onClick={() => inputRef.current?.click()}
-            className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition ${
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition ${
               dragging
                 ? "border-brand-500 bg-brand-50/60 dark:bg-brand-500/10"
                 : "border-slate-200 hover:border-brand-400 dark:border-slate-700"
@@ -123,60 +128,109 @@ export function Upload() {
             <input
               ref={inputRef}
               type="file"
-              accept=".pdf,.csv,.xlsx"
+              accept=".pdf"
+              multiple
               className="hidden"
-              onChange={(e) => handleFile(e.target.files?.[0])}
+              onChange={(e) => addFiles(e.target.files)}
             />
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
               <UploadCloud className="h-7 w-7" />
             </span>
             <p className="mt-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Drop your statement here, or{" "}
+              Drop your statement(s) here, or{" "}
               <span className="text-brand-600 dark:text-brand-400">browse</span>
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              We’ll auto-detect transactions and categorize them
+              We detect the bank layout, categorize rows and reconcile balances
             </p>
           </div>
 
-          {fileName && (
-            <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-100 p-3 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800">
-                  <FileText className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                    {fileName}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {parsing
-                      ? "Parsing…"
-                      : `${rows.length} transactions detected`}
-                  </p>
-                </div>
-              </div>
-              {parsing ? (
-                <Loader2 className="h-5 w-5 animate-spin text-brand-500" />
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFileName(null);
-                    setRows([]);
-                  }}
-                  className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-rose-500 dark:hover:bg-slate-800"
+          {files.length > 0 && (
+            <ul className="mt-4 space-y-2">
+              {files.map((f) => (
+                <li
+                  key={f.name}
+                  className="flex items-center justify-between rounded-xl border border-slate-100 p-3 dark:border-slate-800"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800">
+                      <FileText className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                        {f.name}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {(f.size / 1024).toFixed(0)} KB
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(f.name);
+                    }}
+                    className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-rose-500 dark:hover:bg-slate-800"
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {files.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  <Lock className="h-3.5 w-3.5" />
+                  PDF password (if protected)
+                </span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Leave blank if not encrypted"
+                  className="input"
+                  autoComplete="off"
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => run(true)}
+                  disabled={busy}
+                  className="btn-primary"
+                >
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                  Parse &amp; preview
                 </button>
-              )}
+                <button onClick={reset} className="btn-ghost" disabled={busy}>
+                  Clear
+                </button>
+              </div>
             </div>
           )}
 
-          {imported && (
+          {error && (
+            <div className="mt-4 flex items-center gap-2 rounded-xl bg-rose-50 p-3 text-sm font-medium text-rose-700 dark:bg-rose-500/10 dark:text-rose-400">
+              <AlertTriangle className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+
+          {phase === "done" && result && (
             <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
               <Check className="h-4 w-4" />
-              Transactions imported — view them in the ledger.
+              Imported {result.totals.created ?? 0} new transaction(s)
+              {result.totals.duplicates
+                ? `, skipped ${result.totals.duplicates} duplicate(s)`
+                : ""}
+              .
             </div>
           )}
         </Card>
@@ -191,37 +245,196 @@ export function Upload() {
               Gmail read-only
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              Pull transaction alerts from myabl, HBL &amp; NayaPay senders
+              Pull transaction alerts from myABL, HBL &amp; NayaPay senders
               automatically.
             </p>
-            <button className="btn-primary mt-4 w-full">Connect Gmail</button>
-            <p className="mt-3 text-[11px] text-slate-400">
-              Backend hook coming soon · currently using synthetic data
-            </p>
+            <button className="btn-primary mt-4 w-full" disabled>
+              Connect Gmail
+            </button>
+            <p className="mt-3 text-[11px] text-slate-400">Coming soon</p>
           </div>
         </Card>
       </div>
 
-      {rows.length > 0 && (
-        <Card className="mt-4 p-0">
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                Review before importing
-              </h3>
-              <p className="text-xs text-slate-400">
-                Net effect {formatCurrency(previewTotal, { signed: true })} ·{" "}
-                {rows.length} rows
-              </p>
-            </div>
-            <button onClick={confirmImport} className="btn-primary">
-              <Check className="h-4 w-4" />
-              Import {rows.length}
-            </button>
-          </div>
-          <TransactionsTable transactions={rows} />
-        </Card>
+      {result && (
+        <div className="mt-4 space-y-4">
+          {result.files.map((file) => (
+            <StatementResultCard
+              key={file.source_file}
+              file={file}
+              committed={phase === "done"}
+            />
+          ))}
+          {phase === "preview" &&
+            result.files.some((f) => f.status === "parsed") && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => run(false)}
+                  disabled={busy}
+                  className="btn-primary"
+                >
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  Import {result.totals.parsed} transaction(s)
+                </button>
+              </div>
+            )}
+        </div>
       )}
     </Layout>
+  );
+}
+
+function StatementResultCard({
+  file,
+  committed,
+}: {
+  file: StatementFileResult;
+  committed: boolean;
+}) {
+  if (file.status === "error") {
+    return (
+      <Card>
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-100 text-rose-500 dark:bg-rose-500/15">
+            <AlertTriangle className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {file.source_file}
+            </p>
+            <p className="text-xs text-rose-500">{file.error}</p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  const recon = file.reconciliation;
+  return (
+    <Card className="p-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {file.account_title ?? file.source_file}
+            </h3>
+            <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+              {file.provider}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400">
+            {file.account_number ? `A/C ${file.account_number} · ` : ""}
+            {file.parsed} transactions
+            {committed
+              ? ` · ${file.created} imported, ${file.duplicates} duplicate`
+              : ""}
+            {committed && file.account_created ? " · account created" : ""}
+          </p>
+        </div>
+        {recon && (
+          <div
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ${
+              recon.closing_ok
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+            }`}
+          >
+            {recon.closing_ok ? (
+              <ShieldCheck className="h-3.5 w-3.5" />
+            ) : (
+              <AlertTriangle className="h-3.5 w-3.5" />
+            )}
+            {recon.closing_ok
+              ? "Balanced"
+              : `${recon.row_mismatches} mismatch(es)`}
+          </div>
+        )}
+      </div>
+
+      {recon && (
+        <div className="grid grid-cols-2 gap-px border-y border-slate-100 bg-slate-100 text-center dark:border-slate-800 dark:bg-slate-800 sm:grid-cols-4">
+          <Stat label="Opening" value={formatCurrency(recon.opening_balance)} />
+          <Stat label="Net" value={formatCurrency(recon.net, { signed: true })} />
+          <Stat
+            label="Computed close"
+            value={formatCurrency(recon.computed_closing)}
+          />
+          <Stat
+            label="Printed close"
+            value={formatCurrency(recon.closing_balance)}
+          />
+        </div>
+      )}
+
+      <div className="max-h-96 overflow-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-white text-left text-xs text-slate-400 dark:bg-slate-900">
+            <tr>
+              <th className="px-5 py-2 font-medium">Date</th>
+              <th className="px-3 py-2 font-medium">Description</th>
+              <th className="px-3 py-2 font-medium">Category</th>
+              <th className="px-5 py-2 text-right font-medium">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {file.preview.map((row, i) => {
+              const amt = Number(row.amount);
+              const signed = row.transaction_type === "credit" ? amt : -amt;
+              return (
+                <tr
+                  key={i}
+                  className="border-t border-slate-50 dark:border-slate-800/60"
+                >
+                  <td className="whitespace-nowrap px-5 py-2 text-slate-500 dark:text-slate-400">
+                    {row.transaction_datetime
+                      ? formatDate(row.transaction_datetime)
+                      : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                    {row.description ?? "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {row.category}
+                    </span>
+                  </td>
+                  <td
+                    className={`whitespace-nowrap px-5 py-2 text-right font-medium ${
+                      signed >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-slate-700 dark:text-slate-200"
+                    }`}
+                  >
+                    {formatCurrency(signed, { signed: true })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {file.parsed > file.preview.length && (
+          <p className="px-5 py-2 text-center text-xs text-slate-400">
+            Showing first {file.preview.length} of {file.parsed} rows
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white px-3 py-2.5 dark:bg-slate-900">
+      <p className="text-[11px] uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
+      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+        {value}
+      </p>
+    </div>
   );
 }

@@ -29,15 +29,28 @@ def _norm_amount(amount: Decimal | None) -> str:
     return f"{Decimal(amount):.2f}"
 
 
-def compute_fingerprint(tx: ParsedTransaction, time_window_seconds: int = 180) -> str:
+def compute_fingerprint(
+    tx: ParsedTransaction,
+    time_window_seconds: int = 180,
+    *,
+    user_id: int | None = None,
+    extra: str | None = None,
+) -> str:
     """Deterministic SHA-256 fingerprint of the financial identity of a txn.
 
     Uses provider + type + amount + currency + account_last4 + reference +
     a time bucket. Reference and account are included when present because they
     strongly disambiguate; the time bucket lets email/SMS of the same event
     collide even if their timestamps differ slightly.
+
+    ``user_id`` scopes the fingerprint so two people can hold identical
+    transactions without colliding. ``extra`` is an optional per-row
+    discriminator (used by statement import, where several legitimate rows may
+    share provider+type+amount+date) that keeps distinct rows distinct while
+    staying deterministic across re-uploads.
     """
     parts = [
+        "" if user_id is None else str(user_id),
         tx.provider.value,
         tx.transaction_type.value,
         _norm_amount(tx.amount),
@@ -45,6 +58,7 @@ def compute_fingerprint(tx: ParsedTransaction, time_window_seconds: int = 180) -
         (tx.account_identifier or "").lower(),
         (tx.reference or "").lower(),
         _time_bucket(tx.transaction_datetime, time_window_seconds),
+        (extra or "").lower(),
     ]
     raw = "|".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()

@@ -47,8 +47,8 @@ export function Login() {
       if (mode === "login") await login(email.trim(), password);
       else await signup(name.trim(), email.trim(), password);
       navigate(from, { replace: true });
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -223,7 +223,7 @@ export function Login() {
           </p>
 
           <p className="mt-4 rounded-xl bg-slate-100 px-3 py-2 text-center text-[11px] text-slate-400 dark:bg-slate-800/60">
-            Demo mode — any email &amp; password works.
+            New here? Create an account — it’s stored securely by the FinSync API.
           </p>
         </div>
       </div>

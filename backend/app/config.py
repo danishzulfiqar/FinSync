@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+psycopg://finsync:finsync@localhost:5432/finsync"
 
+    # CORS: comma-separated list of allowed frontend origins (e.g. the Vercel URL).
+    cors_origins: str = ""
+
+    # Auth / JWT
+    jwt_secret_key: str = "change-me-to-a-long-random-string"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
+
     # SMS webhook
     sms_webhook_signing_key: str = "change-me"
     sms_webhook_max_skew_seconds: int = 300
@@ -48,6 +56,25 @@ class Settings(BaseSettings):
     # Deduplication
     dedup_time_window_seconds: int = 180
     dedup_probable_enabled: bool = True
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, value: str) -> str:
+        """Coerce managed-Postgres URLs (postgres://, postgresql://) to the psycopg driver."""
+        if value.startswith("postgres://"):
+            return "postgresql+psycopg://" + value[len("postgres://"):]
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value[len("postgresql://"):]
+        return value
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Allowed CORS origins: configured production origins plus local dev."""
+        origins = [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
+        for dev in ("http://localhost:5173", "http://127.0.0.1:5173"):
+            if dev not in origins:
+                origins.append(dev)
+        return origins
 
     @property
     def gmail_scope_list(self) -> list[str]:

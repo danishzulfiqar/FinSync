@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.deps import get_current_user
 from app.api.routes import (
     accounts,
     analytics,
+    auth,
     export,
     health,
+    statements,
     sync,
     transactions,
     webhooks,
@@ -24,10 +27,10 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# CORS: relaxed in development for the local React/Vite frontend.
+# CORS: allow the configured frontend origins (set CORS_ORIGINS in production).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,12 +41,19 @@ app.include_router(health.router)
 
 # Versioned API.
 prefix = settings.api_v1_prefix
+
+# Public: authentication + inbound SMS webhooks (own HMAC auth).
+app.include_router(auth.router, prefix=prefix)
 app.include_router(webhooks.router, prefix=prefix)
-app.include_router(sync.router, prefix=prefix)
-app.include_router(transactions.router, prefix=prefix)
+
+# Protected: require a valid bearer token.
+protected = [Depends(get_current_user)]
+app.include_router(sync.router, prefix=prefix, dependencies=protected)
+app.include_router(transactions.router, prefix=prefix, dependencies=protected)
 app.include_router(accounts.router, prefix=prefix)
-app.include_router(analytics.router, prefix=prefix)
-app.include_router(export.router, prefix=prefix)
+app.include_router(analytics.router, prefix=prefix, dependencies=protected)
+app.include_router(export.router, prefix=prefix, dependencies=protected)
+app.include_router(statements.router, prefix=prefix, dependencies=protected)
 
 
 @app.get("/")

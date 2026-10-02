@@ -10,6 +10,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    ForeignKey,
     Numeric,
     String,
     UniqueConstraint,
@@ -39,6 +40,14 @@ class Transaction(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Ownership (nullable: mailbox-ingested rows may predate a user link).
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), index=True
+    )
 
     # Provider + account
     provider: Mapped[str] = mapped_column(String(32), index=True)

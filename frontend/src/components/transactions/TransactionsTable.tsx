@@ -20,6 +20,7 @@ export function TransactionsTable({
   const { accounts, categories, updateTransactionCategory } = useAppData();
   const accById = new Map(accounts.map((a) => [a.id, a]));
   const catById = new Map(categories.map((c) => [c.id, c]));
+  const showBalance = transactions.some((t) => t.balanceAfter != null);
 
   if (transactions.length === 0) {
     return (
@@ -39,6 +40,9 @@ export function TransactionsTable({
             <th className="px-4 py-3 font-medium">Category</th>
             <th className="px-4 py-3 font-medium">Account</th>
             <th className="px-4 py-3 text-right font-medium">Amount</th>
+            {showBalance && (
+              <th className="px-4 py-3 text-right font-medium">Balance</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -131,6 +135,11 @@ export function TransactionsTable({
                     signed: true,
                   })}
                 </td>
+                {showBalance && (
+                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                    {t.balanceAfter != null ? formatCurrency(t.balanceAfter) : "—"}
+                  </td>
+                )}
               </tr>
             );
           })}

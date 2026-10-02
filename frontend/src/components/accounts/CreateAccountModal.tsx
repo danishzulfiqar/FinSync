@@ -3,6 +3,7 @@ import { Modal } from "../ui/Modal";
 import type { Account, Provider } from "../../types";
 import { PROVIDERS } from "../../types";
 import { useAppData, type NewAccountInput } from "../../context/AppDataContext";
+import { ApiError } from "../../lib/api";
 
 const ACCOUNT_TYPES: { value: Account["type"]; label: string }[] = [
   { value: "current", label: "Current" },
@@ -23,6 +24,8 @@ export function CreateAccountModal({
   const [type, setType] = useState<Account["type"]>("current");
   const [last4, setLast4] = useState("");
   const [opening, setOpening] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function reset() {
     setName("");
@@ -30,9 +33,10 @@ export function CreateAccountModal({
     setType("current");
     setLast4("");
     setOpening("");
+    setError(null);
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     const input: NewAccountInput = {
       name: name.trim() || `${PROVIDERS[provider].label} ${type}`,
@@ -42,9 +46,19 @@ export function CreateAccountModal({
       openingBalance: Number(opening) || 0,
       color: PROVIDERS[provider].color,
     };
-    addAccount(input);
-    reset();
-    onClose();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await addAccount(input);
+      reset();
+      onClose();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Could not create the account."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -146,10 +160,14 @@ export function CreateAccountModal({
           <button type="button" onClick={onClose} className="btn-ghost">
             Cancel
           </button>
-          <button type="submit" className="btn-primary">
-            Add account
+          <button type="submit" className="btn-primary" disabled={submitting}>
+            {submitting ? "Adding…" : "Add account"}
           </button>
         </div>
+
+        {error && (
+          <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+        )}
       </form>
     </Modal>
   );

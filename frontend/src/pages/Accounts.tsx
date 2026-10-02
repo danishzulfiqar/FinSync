@@ -19,12 +19,12 @@ export function Accounts() {
     <Layout title="Accounts" subtitle="Bank & wallet balances">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="card flex-1 bg-gradient-to-br from-brand-600 to-brand-800 p-6 text-white">
-          <p className="text-sm text-brand-100">Net worth (synced)</p>
+          <p className="text-sm text-brand-100">Total balance</p>
           <p className="mt-1 text-3xl font-bold tracking-tight">
             {formatCurrency(total)}
           </p>
           <p className="mt-2 text-xs text-brand-100">
-            Across {accounts.length} linked accounts
+            Across {accounts.length} account{accounts.length === 1 ? "" : "s"} · latest bank balance per account
           </p>
         </div>
         <button onClick={() => setModalOpen(true)} className="btn-primary h-11">

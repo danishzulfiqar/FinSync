@@ -1,0 +1,32 @@
+# Render blueprint for the FinSync backend. Database = Neon (set DATABASE_URL in dashboard).
+# Deploy: push to GitHub, then Render Dashboard > New > Blueprint > pick this repo.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: finsync-backend
+    runtime: docker
+    plan: free            # Free web services spin down when idle.
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    # Free tier has no pre-deploy hook, so run migrations before starting the server.
+    # Render injects $PORT; bind to it instead of the Dockerfile's default 8000.
+    dockerCommand: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: API_V1_PREFIX
+        value: /api/v1
+      - key: LOG_LEVEL
+        value: INFO
+      - key: JWT_SECRET_KEY
+        generateValue: true          # Render generates a strong secret once.
+      - key: SMS_WEBHOOK_SIGNING_KEY
+        sync: false                   # Set in the dashboard (optional, for SMS webhook).
+      - key: CORS_ORIGINS
+        sync: false                   # Set to your Vercel URL, e.g. https://finsync.vercel.app
+      - key: DATABASE_URL
+        sync: false                   # Paste your Neon connection string in the dashboard.
+

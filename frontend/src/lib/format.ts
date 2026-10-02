@@ -28,11 +28,13 @@ export function formatCompact(amount: number): string {
   return `${sign}Rs ${abs}`;
 }
 
+/** Calendar dates are rendered in UTC: statement rows are day-precision UTC midnights. */
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -40,6 +42,7 @@ export function formatDateShort(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
+    timeZone: "UTC",
   });
 }
 
