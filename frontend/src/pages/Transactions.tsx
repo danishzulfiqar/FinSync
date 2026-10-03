@@ -60,12 +60,12 @@ function exportCsv(
 }
 
 export function Transactions() {
-  const { accounts, categories, transactions, loading } = useAppData();
+  const { accounts, categories, transactions, ready } = useAppData();
   const [query, setQuery] = useState("");
   const [accountId, setAccountId] = useState("all");
   const [categoryId, setCategoryId] = useState("all");
   const [flow, setFlow] = useState<Flow>("all");
-  const initialLoading = loading && transactions.length === 0;
+  const initialLoading = !ready;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -157,7 +157,7 @@ export function Transactions() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+        <div className="mt-4 grid grid-cols-1 gap-2 border-t border-slate-100 pt-4 dark:border-slate-800 sm:grid-cols-3 sm:gap-3">
           <Stat label="Money in" value={formatCurrency(totals.inflow)} tone="green" />
           <Stat label="Money out" value={formatCurrency(totals.outflow)} tone="red" />
           <Stat
@@ -193,10 +193,10 @@ function Stat({
   tone: "green" | "red";
 }) {
   return (
-    <div>
+    <div className="flex items-baseline justify-between gap-3 sm:block">
       <p className="text-xs text-slate-400">{label}</p>
       <p
-        className={`mt-0.5 text-lg font-bold tabular-nums ${
+        className={`whitespace-nowrap text-base font-bold tabular-nums sm:mt-0.5 sm:text-lg ${
           tone === "green"
             ? "text-emerald-600 dark:text-emerald-400"
             : "text-rose-600 dark:text-rose-400"

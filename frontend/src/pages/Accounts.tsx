@@ -9,13 +9,13 @@ import { formatCurrency } from "../lib/format";
 import { PROVIDERS } from "../types";
 
 export function Accounts() {
-  const { accounts, transactions, loading } = useAppData();
+  const { accounts, transactions, ready } = useAppData();
   const [modalOpen, setModalOpen] = useState(false);
   const total = accounts.reduce(
     (s, a) => s + accountBalance(a, transactions),
     0
   );
-  const initialLoading = loading && accounts.length === 0;
+  const initialLoading = !ready;
 
   return (
     <Layout title="Accounts" subtitle="Bank & wallet balances">
@@ -25,7 +25,7 @@ export function Accounts() {
           {initialLoading ? (
             <Skeleton className="mt-2 h-9 w-40 bg-white/20 dark:bg-white/20" />
           ) : (
-            <p className="mt-1 text-3xl font-bold tracking-tight">
+            <p className="mt-1 whitespace-nowrap text-2xl font-bold tabular-nums tracking-tight sm:text-3xl">
               {formatCurrency(total)}
             </p>
           )}
@@ -74,18 +74,18 @@ export function Accounts() {
                 </p>
               </div>
               <div className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
                       {a.name}
                     </p>
                     <p className="text-xs capitalize text-slate-400">
                       {a.type} · {txns} transactions
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="shrink-0 text-right">
                     <p className="text-xs text-slate-400">Balance</p>
-                    <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white">
+                    <p className="whitespace-nowrap text-lg font-bold tabular-nums text-slate-900 dark:text-white">
                       {formatCurrency(balance)}
                     </p>
                   </div>

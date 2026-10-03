@@ -29,14 +29,13 @@ import { formatCurrency } from "../lib/format";
 import { PROVIDERS } from "../types";
 
 export function Dashboard() {
-  const { accounts, categories, transactions, loading, error } = useAppData();
+  const { accounts, categories, transactions, ready, error } = useAppData();
   const kpis = computeKpis(transactions, accounts, categories);
   const flow = cashFlowByMonth(transactions, categories);
   const spending = spendingByCategory(transactions, categories);
   const savingsRate = Math.round(kpis.savingsRate);
-  const empty = !loading && !error && transactions.length === 0;
-  const initialLoading =
-    loading && transactions.length === 0 && accounts.length === 0;
+  const empty = ready && !error && transactions.length === 0;
+  const initialLoading = !ready;
 
   return (
     <Layout
@@ -168,23 +167,23 @@ export function Dashboard() {
                   return (
                     <div
                       key={a.id}
-                      className="flex items-center justify-between rounded-xl border border-slate-100 p-3 dark:border-slate-800"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-3 dark:border-slate-800"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <span
-                          className="flex h-9 w-9 items-center justify-center rounded-lg text-xs font-bold text-white"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
                           style={{ backgroundColor: provider.color }}
                         >
                           {provider.label.slice(0, 2).toUpperCase()}
                         </span>
-                        <div>
-                          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                             {a.name}
                           </p>
                           <p className="text-xs text-slate-400">{a.mask}</p>
                         </div>
                       </div>
-                      <p className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                      <p className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
                         {formatCurrency(accountBalance(a, transactions))}
                       </p>
                     </div>

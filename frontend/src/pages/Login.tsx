@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { useDelayedFlag } from "../lib/hooks";
 
 type Mode = "login" | "signup";
 
@@ -30,6 +31,7 @@ export function Login() {
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const slow = useDelayedFlag(busy, 4000);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -207,6 +209,11 @@ export function Login() {
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
               {mode === "login" ? "Sign in" : "Create account"}
             </button>
+            {slow && (
+              <p className="animate-fade-in text-center text-xs text-slate-400">
+                Waking up the server — this can take up to a minute on first use.
+              </p>
+            )}
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-500">

@@ -30,8 +30,112 @@ export function TransactionsTable({
     );
   }
 
+  const rows = transactions.map((t) => {
+    const acc = accById.get(t.accountId);
+    const cat = catById.get(t.categoryId);
+    return {
+      t,
+      acc,
+      cat,
+      provider: acc ? PROVIDERS[acc.provider] : undefined,
+      SourceIcon: sourceIcon[t.source],
+      credit: t.type === "credit",
+    };
+  });
+
+  const categoryControl = (t: Transaction, color?: string, name?: string) =>
+    editable ? (
+      <select
+        value={t.categoryId}
+        onChange={(e) => updateTransactionCategory(t.id, e.target.value)}
+        className="input max-w-[170px] cursor-pointer py-1.5 text-xs"
+        style={{ color }}
+        aria-label="Category"
+      >
+        {categories.map((c) => (
+          <option
+            key={c.id}
+            value={c.id}
+            className="text-slate-700 dark:text-slate-200"
+          >
+            {c.name}
+          </option>
+        ))}
+      </select>
+    ) : (
+      <Badge color={color}>{name ?? "—"}</Badge>
+    );
+
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/* Phone: card list */}
+      <ul className="divide-y divide-slate-50 dark:divide-slate-800/60 md:hidden">
+        {rows.map(({ t, acc, cat, provider, SourceIcon, credit }) => (
+          <li key={t.id} className="flex gap-3 px-4 py-3.5">
+            <span
+              className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                credit
+                  ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400"
+                  : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+              }`}
+            >
+              {credit ? (
+                <ArrowDownLeft className="h-4 w-4" />
+              ) : (
+                <ArrowUpRight className="h-4 w-4" />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-3">
+                <p className="min-w-0 truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                  {t.description}
+                </p>
+                <p
+                  className={`shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ${
+                    credit
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-slate-800 dark:text-slate-100"
+                  }`}
+                >
+                  {formatCurrency(credit ? t.amount : -t.amount, {
+                    signed: true,
+                  })}
+                </p>
+              </div>
+              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-slate-400">
+                <SourceIcon className="h-3 w-3 shrink-0" />
+                <span className="shrink-0">{formatDate(t.date)}</span>
+                {acc && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: provider?.color }}
+                    />
+                    <span className="truncate">{acc.name}</span>
+                  </>
+                )}
+                {t.pending && (
+                  <span className="chip shrink-0 bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
+                    Pending
+                  </span>
+                )}
+              </p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                {categoryControl(t, cat?.color, cat?.name)}
+                {showBalance && t.balanceAfter != null && (
+                  <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-slate-400">
+                    Bal {formatCurrency(t.balanceAfter)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Tablet & desktop: full table */}
+      <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[720px] text-sm">
         <thead>
           <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800">
@@ -46,12 +150,7 @@ export function TransactionsTable({
           </tr>
         </thead>
         <tbody>
-          {transactions.map((t) => {
-            const acc = accById.get(t.accountId);
-            const cat = catById.get(t.categoryId);
-            const provider = acc ? PROVIDERS[acc.provider] : undefined;
-            const SourceIcon = sourceIcon[t.source];
-            const credit = t.type === "credit";
+          {rows.map(({ t, acc, cat, provider, SourceIcon, credit }) => {
             return (
               <tr
                 key={t.id}
@@ -92,28 +191,7 @@ export function TransactionsTable({
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  {editable ? (
-                    <select
-                      value={t.categoryId}
-                      onChange={(e) =>
-                        updateTransactionCategory(t.id, e.target.value)
-                      }
-                      className="input max-w-[170px] cursor-pointer py-1.5 text-xs"
-                      style={{ color: cat?.color }}
-                    >
-                      {categories.map((c) => (
-                        <option
-                          key={c.id}
-                          value={c.id}
-                          className="text-slate-700 dark:text-slate-200"
-                        >
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <Badge color={cat?.color}>{cat?.name ?? "—"}</Badge>
-                  )}
+                  {categoryControl(t, cat?.color, cat?.name)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
                   <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
@@ -145,6 +223,7 @@ export function TransactionsTable({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }

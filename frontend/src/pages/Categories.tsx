@@ -16,13 +16,13 @@ import {
 import { formatCurrency, formatDate } from "../lib/format";
 
 export function Categories() {
-  const { categories, transactions, loading } = useAppData();
+  const { categories, transactions, ready } = useAppData();
   const spending = spendingByCategory(transactions, categories);
   const income = incomeByCategory(transactions, categories);
   const flow = cashFlowByMonth(transactions, categories);
   const biggest = topExpenses(transactions, 10);
   const budgeted = spending.filter((s) => s.budget > 0);
-  const initialLoading = loading && transactions.length === 0;
+  const initialLoading = !ready;
 
   if (initialLoading) {
     return (
@@ -82,8 +82,35 @@ export function Categories() {
         {biggest.length === 0 ? (
           <p className="px-5 pb-6 text-sm text-slate-400">No expenses yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
+          <>
+            <ul className="divide-y divide-slate-50 dark:divide-slate-800/60 sm:hidden">
+              {biggest.map((t) => {
+                const cat = categories.find((c) => c.id === t.categoryId);
+                return (
+                  <li key={t.id} className="px-5 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="min-w-0 truncate text-sm text-slate-800 dark:text-slate-100">
+                        {t.description}
+                      </p>
+                      <p className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-rose-600 dark:text-rose-400">
+                        {formatCurrency(-t.amount, { signed: true })}
+                      </p>
+                    </div>
+                    <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-slate-400">
+                      <span className="shrink-0">{formatDate(t.date)}</span>
+                      <span aria-hidden>·</span>
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: cat?.color }}
+                      />
+                      <span className="truncate">{cat?.name ?? "—"}</span>
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800">
                   <th className="px-5 py-3 font-medium">Date</th>
@@ -123,7 +150,8 @@ export function Categories() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </Card>
 
@@ -196,15 +224,15 @@ function BreakdownList({
     <div className="space-y-4">
       {slices.map((s) => (
         <div key={s.categoryId}>
-          <div className="mb-1 flex items-center justify-between text-sm">
-            <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+          <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+            <span className="flex min-w-0 items-center gap-2 text-slate-600 dark:text-slate-300">
               <span
-                className="h-2.5 w-2.5 rounded-full"
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: s.color }}
               />
-              {s.name}
+              <span className="truncate">{s.name}</span>
             </span>
-            <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+            <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums text-slate-800 dark:text-slate-100">
               {formatCurrency(s.value)}
               <span className="ml-1.5 text-xs font-normal text-slate-400">
                 {s.share.toFixed(1)}%
@@ -241,9 +269,9 @@ function BreakdownTable({
       <thead>
         <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800">
           <th className="py-2 font-medium">Category</th>
-          <th className="py-2 text-right font-medium">Txns</th>
+          <th className="hidden py-2 text-right font-medium sm:table-cell">Txns</th>
           <th className="py-2 text-right font-medium">Total</th>
-          <th className="py-2 text-right font-medium">Share</th>
+          <th className="py-2 pl-3 text-right font-medium">Share</th>
         </tr>
       </thead>
       <tbody>
@@ -252,22 +280,22 @@ function BreakdownTable({
             key={s.categoryId}
             className="border-b border-slate-50 dark:border-slate-800/60"
           >
-            <td className="py-2.5">
+            <td className="py-2.5 pr-3">
               <span className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
                 <span
-                  className="h-2 w-2 rounded-full"
+                  className="h-2 w-2 shrink-0 rounded-full"
                   style={{ backgroundColor: s.color }}
                 />
                 {s.name}
               </span>
             </td>
-            <td className="py-2.5 text-right tabular-nums text-slate-500">
+            <td className="hidden py-2.5 text-right tabular-nums text-slate-500 sm:table-cell">
               {s.transactions}
             </td>
-            <td className="py-2.5 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+            <td className="whitespace-nowrap py-2.5 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
               {formatCurrency(s.value)}
             </td>
-            <td className="py-2.5 text-right tabular-nums text-slate-500">
+            <td className="whitespace-nowrap py-2.5 pl-3 text-right tabular-nums text-slate-500">
               {s.share.toFixed(1)}%
             </td>
           </tr>
@@ -276,13 +304,13 @@ function BreakdownTable({
       <tfoot>
         <tr className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           <td className="pt-3">Total</td>
-          <td className="pt-3 text-right tabular-nums">
+          <td className="hidden pt-3 text-right tabular-nums sm:table-cell">
             {slices.reduce((s, x) => s + x.transactions, 0)}
           </td>
-          <td className="pt-3 text-right tabular-nums text-slate-800 dark:text-slate-100">
+          <td className="whitespace-nowrap pt-3 text-right tabular-nums text-slate-800 dark:text-slate-100">
             {formatCurrency(total)}
           </td>
-          <td className="pt-3 text-right tabular-nums">100%</td>
+          <td className="pt-3 pl-3 text-right tabular-nums">100%</td>
         </tr>
       </tfoot>
     </table>

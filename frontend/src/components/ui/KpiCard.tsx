@@ -29,24 +29,25 @@ export function KpiCard({
   const a = accents[accent];
   return (
     <div className="card p-5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <span className={cn("flex h-10 w-10 items-center justify-center rounded-xl", a.bg)}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", a.bg)}>
           <Icon className={cn("h-5 w-5", a.fg)} />
         </span>
         {trend && (
           <span
             className={cn(
-              "chip",
+              "chip min-w-0 max-w-full truncate",
               trend.positive
                 ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
                 : "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400"
             )}
+            title={trend.value}
           >
             {trend.value}
           </span>
         )}
       </div>
-      <p className="mt-4 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+      <p className="mt-4 whitespace-nowrap text-xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-white sm:text-2xl">
         {value}
       </p>
       <p className="mt-1 text-sm text-slate-400">{label}</p>

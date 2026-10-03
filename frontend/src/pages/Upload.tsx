@@ -371,7 +371,7 @@ function StatementResultCard({
       )}
 
       <div className="max-h-96 overflow-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[520px] text-sm">
           <thead className="sticky top-0 bg-white text-left text-xs text-slate-400 dark:bg-slate-900">
             <tr>
               <th className="px-5 py-2 font-medium">Date</th>

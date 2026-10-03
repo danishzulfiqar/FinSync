@@ -33,10 +33,15 @@ export default {
         shimmer: {
           "100%": { transform: "translateX(100%)" },
         },
+        progress: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(400%)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.25s ease-out",
         shimmer: "shimmer 1.6s infinite",
+        progress: "progress 1.4s ease-in-out infinite",
       },
     },
   },

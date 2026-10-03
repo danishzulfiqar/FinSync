@@ -23,6 +23,7 @@ import {
   toAccountPayload,
 } from "../lib/catalog";
 import { sortNewestFirst } from "../lib/analytics";
+import { useDelayedFlag } from "../lib/hooks";
 import { useAuth } from "./AuthContext";
 
 export interface NewAccountInput {
@@ -38,7 +39,12 @@ interface AppDataContextValue {
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];
+  /** True while any fetch is in flight (initial load or refresh). */
   loading: boolean;
+  /** False until the first fetch after sign-in has settled — drive skeletons off this. */
+  ready: boolean;
+  /** True when a fetch has been pending long enough to suggest a backend cold start. */
+  slow: boolean;
   error: string | null;
   refresh: () => Promise<void>;
   addAccount: (input: NewAccountInput) => Promise<Account>;
@@ -70,7 +76,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const slow = useDelayedFlag(loading, 4000);
 
   const categories = useMemo<Category[]>(
     () => buildCategories(transactions.map((t) => t.categoryId)),
@@ -93,6 +101,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setError(message);
     } finally {
       setLoading(false);
+      setReady(true);
     }
   }, []);
 
@@ -102,6 +111,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setAccounts([]);
       setTransactions([]);
       setError(null);
+      setReady(false);
       return;
     }
     void refresh();
@@ -155,6 +165,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       categories,
       transactions,
       loading,
+      ready,
+      slow,
       error,
       refresh,
       addAccount,
@@ -166,6 +178,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       categories,
       transactions,
       loading,
+      ready,
+      slow,
       error,
       refresh,
       addAccount,
