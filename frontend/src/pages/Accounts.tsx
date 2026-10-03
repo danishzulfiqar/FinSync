@@ -2,39 +2,53 @@ import { useState } from "react";
 import { Plus, CreditCard } from "lucide-react";
 import { Layout } from "../components/layout/Layout";
 import { CreateAccountModal } from "../components/accounts/CreateAccountModal";
+import { AccountCardSkeleton, Skeleton } from "../components/ui/Skeleton";
 import { useAppData } from "../context/AppDataContext";
 import { accountBalance } from "../lib/analytics";
 import { formatCurrency } from "../lib/format";
 import { PROVIDERS } from "../types";
 
 export function Accounts() {
-  const { accounts, transactions } = useAppData();
+  const { accounts, transactions, loading } = useAppData();
   const [modalOpen, setModalOpen] = useState(false);
   const total = accounts.reduce(
     (s, a) => s + accountBalance(a, transactions),
     0
   );
+  const initialLoading = loading && accounts.length === 0;
 
   return (
     <Layout title="Accounts" subtitle="Bank & wallet balances">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="card flex-1 bg-gradient-to-br from-brand-600 to-brand-800 p-6 text-white">
           <p className="text-sm text-brand-100">Total balance</p>
-          <p className="mt-1 text-3xl font-bold tracking-tight">
-            {formatCurrency(total)}
-          </p>
+          {initialLoading ? (
+            <Skeleton className="mt-2 h-9 w-40 bg-white/20 dark:bg-white/20" />
+          ) : (
+            <p className="mt-1 text-3xl font-bold tracking-tight">
+              {formatCurrency(total)}
+            </p>
+          )}
           <p className="mt-2 text-xs text-brand-100">
             Across {accounts.length} account{accounts.length === 1 ? "" : "s"} · latest bank balance per account
           </p>
         </div>
-        <button onClick={() => setModalOpen(true)} className="btn-primary h-11">
+        <button
+          onClick={() => setModalOpen(true)}
+          className="btn-primary h-11 w-full sm:w-auto"
+        >
           <Plus className="h-4 w-4" />
           Add account
         </button>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {accounts.map((a) => {
+        {initialLoading &&
+          Array.from({ length: 3 }).map((_, i) => (
+            <AccountCardSkeleton key={i} />
+          ))}
+        {!initialLoading &&
+          accounts.map((a) => {
           const provider = PROVIDERS[a.provider];
           const balance = accountBalance(a, transactions);
           const txns = transactions.filter((t) => t.accountId === a.id).length;
@@ -81,17 +95,18 @@ export function Accounts() {
           );
         })}
 
-        <button
-          onClick={() => setModalOpen(true)}
-          className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 transition hover:border-brand-400 hover:text-brand-500 dark:border-slate-700"
-        >
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-            <Plus className="h-6 w-6" />
-          </span>
-          <span className="text-sm font-semibold">Link a new account</span>
-        </button>
+        {!initialLoading && (
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 transition hover:border-brand-400 hover:text-brand-500 dark:border-slate-700"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+              <Plus className="h-6 w-6" />
+            </span>
+            <span className="text-sm font-semibold">Link a new account</span>
+          </button>
+        )}
       </div>
-
       <CreateAccountModal open={modalOpen} onClose={() => setModalOpen(false)} />
     </Layout>
   );

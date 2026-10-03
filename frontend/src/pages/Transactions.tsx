@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Search, Download, SlidersHorizontal } from "lucide-react";
 import { Layout } from "../components/layout/Layout";
 import { Card } from "../components/ui/Card";
+import { TableRowsSkeleton } from "../components/ui/Skeleton";
 import { TransactionsTable } from "../components/transactions/TransactionsTable";
 import { useAppData } from "../context/AppDataContext";
 import { formatCurrency } from "../lib/format";
@@ -59,11 +60,12 @@ function exportCsv(
 }
 
 export function Transactions() {
-  const { accounts, categories, transactions } = useAppData();
+  const { accounts, categories, transactions, loading } = useAppData();
   const [query, setQuery] = useState("");
   const [accountId, setAccountId] = useState("all");
   const [categoryId, setCategoryId] = useState("all");
   const [flow, setFlow] = useState<Flow>("all");
+  const initialLoading = loading && transactions.length === 0;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -108,7 +110,7 @@ export function Transactions() {
             <select
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
-              className="input w-auto"
+              className="input w-full min-w-[9rem] flex-1 sm:w-auto sm:flex-none"
             >
               <option value="all">All accounts</option>
               {accounts.map((a) => (
@@ -120,7 +122,7 @@ export function Transactions() {
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="input w-auto"
+              className="input w-full min-w-[9rem] flex-1 sm:w-auto sm:flex-none"
             >
               <option value="all">All categories</option>
               {categories.map((c) => (
@@ -129,12 +131,12 @@ export function Transactions() {
                 </option>
               ))}
             </select>
-            <div className="flex rounded-xl border border-slate-200 p-0.5 dark:border-slate-700">
+            <div className="flex flex-1 rounded-xl border border-slate-200 p-0.5 dark:border-slate-700 sm:flex-none">
               {(["all", "in", "out"] as Flow[]).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFlow(f)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition ${
+                  className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition sm:flex-none ${
                     flow === f
                       ? "bg-brand-600 text-white"
                       : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
@@ -146,7 +148,7 @@ export function Transactions() {
             </div>
             <button
               onClick={() => exportCsv(filtered, accounts, categories)}
-              className="btn-outline"
+              className="btn-outline w-full sm:w-auto"
               title="Export CSV"
             >
               <Download className="h-4 w-4" />
@@ -171,7 +173,11 @@ export function Transactions() {
           <SlidersHorizontal className="h-4 w-4 text-slate-400" />
           Ledger
         </div>
-        <TransactionsTable transactions={filtered} />
+        {initialLoading ? (
+          <TableRowsSkeleton rows={10} />
+        ) : (
+          <TransactionsTable transactions={filtered} />
+        )}
       </Card>
     </Layout>
   );

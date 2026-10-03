@@ -1,5 +1,9 @@
 import { Layout } from "../components/layout/Layout";
 import { Card, CardHeader } from "../components/ui/Card";
+import {
+  ChartCardSkeleton,
+  TableRowsSkeleton,
+} from "../components/ui/Skeleton";
 import { MonthlyBars } from "../components/charts/MonthlyBars";
 import { useAppData } from "../context/AppDataContext";
 import {
@@ -12,12 +16,36 @@ import {
 import { formatCurrency, formatDate } from "../lib/format";
 
 export function Categories() {
-  const { categories, transactions } = useAppData();
+  const { categories, transactions, loading } = useAppData();
   const spending = spendingByCategory(transactions, categories);
   const income = incomeByCategory(transactions, categories);
   const flow = cashFlowByMonth(transactions, categories);
   const biggest = topExpenses(transactions, 10);
   const budgeted = spending.filter((s) => s.budget > 0);
+  const initialLoading = loading && transactions.length === 0;
+
+  if (initialLoading) {
+    return (
+      <Layout title="Categories" subtitle="Where your money comes from and goes">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <ChartCardSkeleton height={260} />
+          </div>
+          <ChartCardSkeleton height={260} />
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader title="Spending" subtitle="Every expense category" />
+            <TableRowsSkeleton rows={6} />
+          </Card>
+          <Card>
+            <CardHeader title="Income" subtitle="Every income category" />
+            <TableRowsSkeleton rows={6} />
+          </Card>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title="Categories" subtitle="Where your money comes from and goes">

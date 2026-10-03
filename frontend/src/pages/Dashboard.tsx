@@ -9,6 +9,12 @@ import {
 import { Layout } from "../components/layout/Layout";
 import { KpiCard } from "../components/ui/KpiCard";
 import { Card, CardHeader } from "../components/ui/Card";
+import {
+  KpiCardSkeleton,
+  ChartCardSkeleton,
+  ListRowsSkeleton,
+  TableRowsSkeleton,
+} from "../components/ui/Skeleton";
 import { SpendingDonut } from "../components/charts/SpendingDonut";
 import { CashFlowArea } from "../components/charts/CashFlowArea";
 import { TransactionsTable } from "../components/transactions/TransactionsTable";
@@ -29,6 +35,8 @@ export function Dashboard() {
   const spending = spendingByCategory(transactions, categories);
   const savingsRate = Math.round(kpis.savingsRate);
   const empty = !loading && !error && transactions.length === 0;
+  const initialLoading =
+    loading && transactions.length === 0 && accounts.length === 0;
 
   return (
     <Layout
@@ -50,129 +58,163 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          label="Total balance"
-          value={formatCurrency(kpis.balance)}
-          icon={Wallet}
-          accent="brand"
-          trend={{
-            value: `${accounts.length} account${accounts.length === 1 ? "" : "s"} · ${kpis.months} month${kpis.months === 1 ? "" : "s"}`,
-            positive: true,
-          }}
-        />
-        <KpiCard
-          label="Total income"
-          value={formatCurrency(kpis.income)}
-          icon={TrendingUp}
-          accent="green"
-          trend={{ value: `${kpis.count} transactions`, positive: true }}
-        />
-        <KpiCard
-          label="Total expense"
-          value={formatCurrency(kpis.spending)}
-          icon={TrendingDown}
-          accent="red"
-          trend={{
-            value: `avg ${formatCurrency(kpis.avgExpense)}`,
-            positive: false,
-          }}
-        />
-        <KpiCard
-          label="Net"
-          value={formatCurrency(kpis.net, { signed: true })}
-          icon={PiggyBank}
-          accent="sky"
-          trend={{
-            value: `${savingsRate}% savings rate`,
-            positive: kpis.net >= 0,
-          }}
-        />
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader
-            title="Cash flow"
-            subtitle="Income vs expense by month"
-          />
-          <CashFlowArea data={flow} />
-        </Card>
-        <Card>
-          <CardHeader title="Where money goes" subtitle="Expense by category" />
-          <SpendingDonut data={spending} />
-        </Card>
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader
-            title="Accounts"
-            action={
-              <Link
-                to="/accounts"
-                className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400"
-              >
-                Manage
-              </Link>
-            }
-          />
-          <div className="space-y-3">
-            {accounts.length === 0 && (
-              <p className="py-6 text-center text-sm text-slate-400">
-                Accounts are created automatically when you import a statement.
-              </p>
-            )}
-            {accounts.map((a) => {
-              const provider = PROVIDERS[a.provider];
-              return (
-                <div
-                  key={a.id}
-                  className="flex items-center justify-between rounded-xl border border-slate-100 p-3 dark:border-slate-800"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-xs font-bold text-white"
-                      style={{ backgroundColor: provider.color }}
-                    >
-                      {provider.label.slice(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {a.name}
-                      </p>
-                      <p className="text-xs text-slate-400">{a.mask}</p>
-                    </div>
-                  </div>
-                  <p className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                    {formatCurrency(accountBalance(a, transactions))}
-                  </p>
-                </div>
-              );
-            })}
+      {initialLoading ? (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <KpiCardSkeleton key={i} />
+            ))}
           </div>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader
-            title="Recent transactions"
-            action={
-              <Link
-                to="/transactions"
-                className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400"
-              >
-                View all <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            }
-          />
-          <div className="-mx-5 -mb-5">
-            <TransactionsTable
-              transactions={transactions.slice(0, 6)}
-              editable={false}
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <ChartCardSkeleton height={260} />
+            </div>
+            <ChartCardSkeleton height={260} />
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card>
+              <CardHeader title="Accounts" />
+              <ListRowsSkeleton rows={4} />
+            </Card>
+            <Card className="lg:col-span-2 p-0">
+              <div className="px-5 py-4">
+                <CardHeader title="Recent transactions" />
+              </div>
+              <TableRowsSkeleton rows={6} />
+            </Card>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <KpiCard
+              label="Total balance"
+              value={formatCurrency(kpis.balance)}
+              icon={Wallet}
+              accent="brand"
+              trend={{
+                value: `${accounts.length} account${accounts.length === 1 ? "" : "s"} · ${kpis.months} month${kpis.months === 1 ? "" : "s"}`,
+                positive: true,
+              }}
+            />
+            <KpiCard
+              label="Total income"
+              value={formatCurrency(kpis.income)}
+              icon={TrendingUp}
+              accent="green"
+              trend={{ value: `${kpis.count} transactions`, positive: true }}
+            />
+            <KpiCard
+              label="Total expense"
+              value={formatCurrency(kpis.spending)}
+              icon={TrendingDown}
+              accent="red"
+              trend={{
+                value: `avg ${formatCurrency(kpis.avgExpense)}`,
+                positive: false,
+              }}
+            />
+            <KpiCard
+              label="Net"
+              value={formatCurrency(kpis.net, { signed: true })}
+              icon={PiggyBank}
+              accent="sky"
+              trend={{
+                value: `${savingsRate}% savings rate`,
+                positive: kpis.net >= 0,
+              }}
             />
           </div>
-        </Card>
-      </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2">
+              <CardHeader
+                title="Cash flow"
+                subtitle="Income vs expense by month"
+              />
+              <CashFlowArea data={flow} />
+            </Card>
+            <Card>
+              <CardHeader
+                title="Where money goes"
+                subtitle="Expense by category"
+              />
+              <SpendingDonut data={spending} />
+            </Card>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card>
+              <CardHeader
+                title="Accounts"
+                action={
+                  <Link
+                    to="/accounts"
+                    className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                  >
+                    Manage
+                  </Link>
+                }
+              />
+              <div className="space-y-3">
+                {accounts.length === 0 && (
+                  <p className="py-6 text-center text-sm text-slate-400">
+                    Accounts are created automatically when you import a
+                    statement.
+                  </p>
+                )}
+                {accounts.map((a) => {
+                  const provider = PROVIDERS[a.provider];
+                  return (
+                    <div
+                      key={a.id}
+                      className="flex items-center justify-between rounded-xl border border-slate-100 p-3 dark:border-slate-800"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-xs font-bold text-white"
+                          style={{ backgroundColor: provider.color }}
+                        >
+                          {provider.label.slice(0, 2).toUpperCase()}
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                            {a.name}
+                          </p>
+                          <p className="text-xs text-slate-400">{a.mask}</p>
+                        </div>
+                      </div>
+                      <p className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                        {formatCurrency(accountBalance(a, transactions))}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader
+                title="Recent transactions"
+                action={
+                  <Link
+                    to="/transactions"
+                    className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                  >
+                    View all <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                }
+              />
+              <div className="-mx-5 -mb-5">
+                <TransactionsTable
+                  transactions={transactions.slice(0, 6)}
+                  editable={false}
+                />
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
     </Layout>
   );
 }
