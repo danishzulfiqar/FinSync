@@ -265,6 +265,7 @@ function BreakdownTable({
     return <p className="py-6 text-center text-sm text-slate-400">{empty}</p>;
   const total = slices.reduce((s, x) => s + x.value, 0);
   return (
+    <div className="overflow-x-auto">
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800">
@@ -314,5 +315,6 @@ function BreakdownTable({
         </tr>
       </tfoot>
     </table>
+    </div>
   );
 }

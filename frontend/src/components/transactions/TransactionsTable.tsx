@@ -43,12 +43,17 @@ export function TransactionsTable({
     };
   });
 
-  const categoryControl = (t: Transaction, color?: string, name?: string) =>
+  const categoryControl = (
+    t: Transaction,
+    color?: string,
+    name?: string,
+    className = "max-w-[170px]"
+  ) =>
     editable ? (
       <select
         value={t.categoryId}
         onChange={(e) => updateTransactionCategory(t.id, e.target.value)}
-        className="input max-w-[170px] cursor-pointer py-1.5 text-xs"
+        className={`input cursor-pointer py-1.5 text-xs ${className}`}
         style={{ color }}
         aria-label="Category"
       >
@@ -87,7 +92,7 @@ export function TransactionsTable({
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                <p className="line-clamp-2 min-w-0 break-words text-sm font-medium leading-snug text-slate-800 dark:text-slate-100">
                   {t.description}
                 </p>
                 <p
@@ -121,8 +126,13 @@ export function TransactionsTable({
                   </span>
                 )}
               </p>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                {categoryControl(t, cat?.color, cat?.name)}
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                {categoryControl(
+                  t,
+                  cat?.color,
+                  cat?.name,
+                  "w-auto min-w-[8.5rem] max-w-[170px] flex-1"
+                )}
                 {showBalance && t.balanceAfter != null && (
                   <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-slate-400">
                     Bal {formatCurrency(t.balanceAfter)}
