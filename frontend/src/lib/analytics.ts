@@ -1,4 +1,5 @@
 import type { Account, Category, Transaction } from "../types";
+import type { TimeRange } from "./api";
 import { monthKey } from "./format";
 
 /**
@@ -7,6 +8,10 @@ import { monthKey } from "./format";
  *  - savings rate = net / income
  *  - balance = the bank-printed running balance of the latest row when known,
  *    otherwise opening balance + Σ signed flows
+ *
+ * On top of that, FinSync can optionally hide *internal transfers* (money
+ * moving between the user's own accounts) from the flow totals — see
+ * `detectInternalTransfers`. Balances always include every row.
  */
 
 export function signedAmount(t: Transaction): number {
@@ -20,6 +25,163 @@ export function sortNewestFirst(rows: Transaction[]): Transaction[] {
   );
 }
 
+// --------------------------------------------------------------- transfers
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Categories that can never be a leg of an own-account transfer: cash leaving
+ * via an ATM, a card purchase, a bill, a salary credit. Only generic / transfer
+ * categories remain eligible, which keeps round-number coincidences (two
+ * unrelated Rs 20,000 movements) from being paired.
+ */
+const NON_TRANSFER_CATEGORIES = new Set([
+  "cash-atm",
+  "food-dining",
+  "groceries-shopping",
+  "fuel-transport",
+  "bills-utilities",
+  "telecom-mobile",
+  "subscriptions",
+  "health",
+  "education",
+  "fees-charges",
+  "salary",
+  "profit-returns",
+  "refunds",
+]);
+
+/**
+ * Find debit/credit pairs that are really one transfer between two of the
+ * user's own accounts: same amount, different accounts, dated within
+ * `windowDays` of each other, and neither leg in a category that rules out a
+ * transfer. Two matching passes per amount bucket — first legs whose text
+ * shares a distinctive word (the account holder's name shows on both sides
+ * of a self-transfer), then legs that are both generic or self-named. A
+ * payment to a third party is never paired. Returns the ids of both legs.
+ */
+export function detectInternalTransfers(
+  transactions: Transaction[],
+  windowDays = 3,
+  selfName = ""
+): Set<string> {
+  const matched = new Set<string>();
+  const buckets = new Map<string, { debits: Transaction[]; credits: Transaction[] }>();
+  for (const t of transactions) {
+    if (!t.accountId || t.amount <= 0) continue;
+    if (NON_TRANSFER_CATEGORIES.has(t.categoryId)) continue;
+    const key = t.amount.toFixed(2);
+    const b = buckets.get(key) ?? { debits: [], credits: [] };
+    (t.type === "debit" ? b.debits : b.credits).push(t);
+    buckets.set(key, b);
+  }
+  const self = new Set(
+    selfName.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3)
+  );
+  const window = windowDays * DAY_MS;
+  for (const { debits, credits } of buckets.values()) {
+    if (debits.length === 0 || credits.length === 0) continue;
+    const free = credits.map((c) => ({ c, ts: new Date(c.date).getTime(), words: words(c) }));
+    for (const requireOverlap of [true, false]) {
+      for (const d of debits) {
+        if (matched.has(d.id)) continue;
+        const dts = new Date(d.date).getTime();
+        const dWords = words(d);
+        if (!requireOverlap && !selfOrGeneric(dWords, self)) continue;
+        let best = -1;
+        let bestGap = Infinity;
+        for (let i = 0; i < free.length; i++) {
+          const { c, ts, words: cWords } = free[i];
+          if (c.accountId === d.accountId) continue;
+          const gap = Math.abs(ts - dts);
+          if (gap > window || gap >= bestGap) continue;
+          if (requireOverlap ? !overlaps(dWords, cWords) : !selfOrGeneric(cWords, self)) continue;
+          best = i;
+          bestGap = gap;
+        }
+        if (best >= 0) {
+          matched.add(d.id);
+          matched.add(free[best].c.id);
+          free.splice(best, 1);
+        }
+      }
+    }
+  }
+  return matched;
+}
+
+const STOP = new Set([
+  "raast", "p2p", "ibft", "transfer", "funds", "fund", "money", "received", "sent",
+  "from", "nayapay", "myabl", "inter", "bank", "abl", "hbl", "online", "mobile",
+  "internet", "banking", "account", "payment", "transaction", "wallet", "konnect",
+]);
+
+/** Distinctive lowercase tokens (≥4 chars, not a generic transfer word). */
+function words(t: Transaction): Set<string> {
+  const out = new Set<string>();
+  for (const w of `${t.description} ${t.merchant}`.toLowerCase().split(/[^a-z]+/)) {
+    if (w.length >= 4 && !STOP.has(w)) out.add(w);
+  }
+  return out;
+}
+
+function overlaps(a: Set<string>, b: Set<string>): boolean {
+  for (const w of a) if (b.has(w)) return true;
+  return false;
+}
+
+/** No distinctive word other than the account holder's own name. */
+function selfOrGeneric(ws: Set<string>, self: Set<string>): boolean {
+  for (const w of ws) if (!self.has(w)) return false;
+  return true;
+}
+
+/** Rows that count toward income/expense under the given settings. */
+export function flowRows(
+  transactions: Transaction[],
+  excludeTransfers: boolean
+): Transaction[] {
+  return excludeTransfers ? transactions.filter((t) => !t.transfer) : transactions;
+}
+
+// ------------------------------------------------------------- time ranges
+
+export const RANGE_MONTHS: Record<TimeRange, number | null> = {
+  "1m": 1,
+  "3m": 3,
+  "6m": 6,
+  "1y": 12,
+  all: null,
+};
+
+export const RANGE_LABELS: Record<TimeRange, string> = {
+  "1m": "1M",
+  "3m": "3M",
+  "6m": "6M",
+  "1y": "1Y",
+  all: "All",
+};
+
+/** First day (UTC) of the calendar month `n-1` months before `now`'s month. */
+export function rangeStart(range: TimeRange, now = new Date()): string | null {
+  const n = RANGE_MONTHS[range];
+  if (n == null) return null;
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (n - 1), 1));
+  return d.toISOString();
+}
+
+/** Calendar-month aligned window ending now (so monthly charts have no partial first bar). */
+export function inRange(
+  transactions: Transaction[],
+  range: TimeRange,
+  now = new Date()
+): Transaction[] {
+  const start = rangeStart(range, now);
+  return start ? transactions.filter((t) => t.date >= start) : transactions;
+}
+
+// -------------------------------------------------------------------- KPIs
+
 export interface Kpis {
   income: number;
   spending: number;
@@ -30,19 +192,25 @@ export interface Kpis {
   /** Percentage, e.g. 23.4. 0 when there is no income. */
   savingsRate: number;
   months: number;
+  /** Rows hidden from the flow totals as internal transfers. */
+  transfersHidden: number;
 }
 
-/** Headline numbers for the given transaction set (FinLens `kpi_metrics`). */
+/**
+ * Headline numbers (FinLens `kpi_metrics`). `flows` is the (possibly
+ * range-filtered, transfer-filtered) set that drives income/expense;
+ * `all` is the complete ledger used for authoritative balances.
+ */
 export function computeKpis(
-  transactions: Transaction[],
+  flows: Transaction[],
   accounts: Account[],
-  _categories: Category[]
+  all: Transaction[] = flows
 ): Kpis {
   let income = 0;
   let spending = 0;
   let debits = 0;
   const months = new Set<string>();
-  for (const t of transactions) {
+  for (const t of flows) {
     if (t.type === "credit") income += t.amount;
     else {
       spending += t.amount;
@@ -51,19 +219,17 @@ export function computeKpis(
     months.add(monthKey(t.date));
   }
   const net = income - spending;
-  const balance = accounts.reduce(
-    (s, a) => s + accountBalance(a, transactions),
-    0
-  );
+  const balance = accounts.reduce((s, a) => s + accountBalance(a, all), 0);
   return {
     income,
     spending,
     net,
     balance,
-    count: transactions.length,
+    count: flows.length,
     avgExpense: debits ? spending / debits : 0,
     savingsRate: income ? (net / income) * 100 : 0,
     months: months.size,
+    transfersHidden: all.length - flows.length,
   };
 }
 
@@ -187,4 +353,115 @@ export function topExpenses(transactions: Transaction[], n = 10): Transaction[] 
     .filter((t) => t.type === "debit" && t.amount > 0)
     .sort((a, b) => b.amount - a.amount)
     .slice(0, n);
+}
+
+// ---------------------------------------------------------- balance series
+
+export interface BalancePoint {
+  month: string; // yyyy-mm
+  balance: number;
+}
+
+/**
+ * Combined month-end balance per month, rebuilt backwards from today's
+ * authoritative total so the series always terminates at the real balance
+ * (FinLens `forecast_balance` history). Uses the full ledger — transfers
+ * between own accounts net to zero here anyway.
+ */
+export function balanceSeries(
+  transactions: Transaction[],
+  accounts: Account[]
+): BalancePoint[] {
+  const nets = new Map<string, number>();
+  for (const t of transactions) {
+    const k = monthKey(t.date);
+    nets.set(k, (nets.get(k) ?? 0) + signedAmount(t));
+  }
+  const months = [...nets.keys()].sort();
+  let running = accounts.reduce((s, a) => s + accountBalance(a, transactions), 0);
+  const out: BalancePoint[] = [];
+  for (let i = months.length - 1; i >= 0; i--) {
+    out.unshift({ month: months[i], balance: running });
+    running -= nets.get(months[i]) ?? 0;
+  }
+  return out;
+}
+
+// ----------------------------------------------------------- period deltas
+
+export interface Delta {
+  current: number;
+  previous: number;
+  /** Percent change; null when the previous value is 0. */
+  pct: number | null;
+  /** yyyy-mm of the comparison month. */
+  versus: string;
+}
+
+function delta(current: number, previous: number, versus: string): Delta {
+  return {
+    current,
+    previous,
+    pct: previous ? ((current - previous) / Math.abs(previous)) * 100 : null,
+    versus,
+  };
+}
+
+export interface PeriodDeltas {
+  income: Delta;
+  spending: Delta;
+  net: Delta;
+  balance: Delta;
+}
+
+/**
+ * Month-over-month change, like a market "24h change" chip. Flow metrics
+ * compare the last two *complete* months (a 3-day-old month would otherwise
+ * read as a 90% collapse); balance compares today against the previous
+ * month-end. Returns null with fewer than two months of data.
+ */
+export function periodDeltas(
+  flows: Transaction[],
+  all: Transaction[],
+  accounts: Account[],
+  now = new Date()
+): PeriodDeltas | null {
+  const currentKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const months = cashFlowByMonth(flows, []).filter((m) => m.month < currentKey);
+  const balances = balanceSeries(all, accounts);
+  if (months.length < 2 || balances.length < 2) return null;
+  const [prev, cur] = months.slice(-2);
+  const [bPrev, bCur] = balances.slice(-2);
+  return {
+    income: delta(cur.income, prev.income, prev.month),
+    spending: delta(cur.spending, prev.spending, prev.month),
+    net: delta(cur.net, prev.net, prev.month),
+    balance: delta(bCur.balance, bPrev.balance, bPrev.month),
+  };
+}
+
+// --------------------------------------------------------- account shares
+
+export interface AccountShare {
+  account: Account;
+  balance: number;
+  /** Share of the positive total, in percent. */
+  share: number;
+  transactions: number;
+}
+
+/** Per-account balance and share of the total (a "dominance" bar). */
+export function accountShares(
+  accounts: Account[],
+  transactions: Transaction[]
+): AccountShare[] {
+  const rows = accounts.map((account) => ({
+    account,
+    balance: accountBalance(account, transactions),
+    transactions: transactions.filter((t) => t.accountId === account.id).length,
+    share: 0,
+  }));
+  const total = rows.reduce((s, r) => s + Math.max(r.balance, 0), 0);
+  for (const r of rows) r.share = total ? (Math.max(r.balance, 0) / total) * 100 : 0;
+  return rows.sort((a, b) => b.balance - a.balance);
 }

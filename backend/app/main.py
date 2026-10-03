@@ -12,6 +12,7 @@ from app.api.routes import (
     auth,
     export,
     health,
+    preferences,
     statements,
     sync,
     transactions,
@@ -54,6 +55,7 @@ app.include_router(accounts.router, prefix=prefix)
 app.include_router(analytics.router, prefix=prefix, dependencies=protected)
 app.include_router(export.router, prefix=prefix, dependencies=protected)
 app.include_router(statements.router, prefix=prefix, dependencies=protected)
+app.include_router(preferences.router, prefix=prefix, dependencies=protected)
 
 
 @app.get("/")

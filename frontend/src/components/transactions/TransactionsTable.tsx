@@ -2,13 +2,22 @@ import { PROVIDERS, type Transaction } from "../../types";
 import { useAppData } from "../../context/AppDataContext";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { Badge } from "../ui/Badge";
-import { ArrowDownLeft, ArrowUpRight, Mail, FileText, PencilLine } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Mail, FileText, PencilLine } from "lucide-react";
 
 const sourceIcon = {
   gmail: Mail,
   statement: FileText,
   manual: PencilLine,
 } as const;
+
+const TransferTag = () => (
+  <span
+    className="chip shrink-0 bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400"
+    title="Transfer between your own accounts"
+  >
+    <ArrowLeftRight className="h-3 w-3" /> Transfer
+  </span>
+);
 
 export function TransactionsTable({
   transactions,
@@ -107,7 +116,7 @@ export function TransactionsTable({
                   })}
                 </p>
               </div>
-              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-slate-400">
+              <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-slate-400">
                 <SourceIcon className="h-3 w-3 shrink-0" />
                 <span className="shrink-0">{formatDate(t.date)}</span>
                 {acc && (
@@ -125,6 +134,7 @@ export function TransactionsTable({
                     Pending
                   </span>
                 )}
+                {t.transfer && <TransferTag />}
               </p>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
                 {categoryControl(
@@ -196,6 +206,7 @@ export function TransactionsTable({
                             Pending
                           </span>
                         )}
+                        {t.transfer && <TransferTag />}
                       </p>
                     </div>
                   </div>

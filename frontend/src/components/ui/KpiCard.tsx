@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { cn } from "../../lib/format";
 
 interface KpiCardProps {
@@ -6,6 +6,10 @@ interface KpiCardProps {
   value: string;
   icon: ComponentType<{ className?: string }>;
   trend?: { value: string; positive: boolean };
+  /** Custom top-right element (e.g. a DeltaChip); takes precedence over `trend`. */
+  chip?: ReactNode;
+  /** Small muted line under the label. */
+  hint?: string;
   accent?: "brand" | "green" | "red" | "sky";
 }
 
@@ -24,6 +28,8 @@ export function KpiCard({
   value,
   icon: Icon,
   trend,
+  chip,
+  hint,
   accent = "brand",
 }: KpiCardProps) {
   const a = accents[accent];
@@ -33,24 +39,26 @@ export function KpiCard({
         <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", a.bg)}>
           <Icon className={cn("h-5 w-5", a.fg)} />
         </span>
-        {trend && (
-          <span
-            className={cn(
-              "chip min-w-0 max-w-full truncate",
-              trend.positive
-                ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
-                : "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400"
-            )}
-            title={trend.value}
-          >
-            {trend.value}
-          </span>
-        )}
+        {chip ??
+          (trend && (
+            <span
+              className={cn(
+                "chip min-w-0 max-w-full truncate",
+                trend.positive
+                  ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                  : "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400"
+              )}
+              title={trend.value}
+            >
+              {trend.value}
+            </span>
+          ))}
       </div>
       <p className="mt-4 whitespace-nowrap text-xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-white sm:text-2xl">
         {value}
       </p>
       <p className="mt-1 text-sm text-slate-400">{label}</p>
+      {hint && <p className="mt-0.5 truncate text-xs text-slate-400/80">{hint}</p>}
     </div>
   );
 }

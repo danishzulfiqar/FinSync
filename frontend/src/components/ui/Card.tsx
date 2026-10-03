@@ -21,8 +21,8 @@ export function CardHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex items-start justify-between gap-3">
-      <div>
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
           {title}
         </h3>
@@ -30,7 +30,7 @@ export function CardHeader({
           <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>
         )}
       </div>
-      {action}
+      {action && <div className="min-w-0 max-w-full">{action}</div>}
     </div>
   );
 }

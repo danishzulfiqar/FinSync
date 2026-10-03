@@ -1,20 +1,27 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   ArrowLeftRight,
   Wallet,
   Upload,
   PieChart,
+  Sparkles,
+  Settings,
+  RefreshCw,
+  CheckCircle2,
   X,
 } from "lucide-react";
-import { cn } from "../../lib/format";
+import { useAppData } from "../../context/AppDataContext";
+import { cn, formatDateTime } from "../../lib/format";
 
 const nav = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { to: "/accounts", label: "Accounts", icon: Wallet },
   { to: "/categories", label: "Categories", icon: PieChart },
+  { to: "/predictions", label: "Predictions", icon: Sparkles },
   { to: "/upload", label: "Import", icon: Upload },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar({
@@ -24,6 +31,28 @@ export function Sidebar({
   open: boolean;
   onClose: () => void;
 }) {
+  const { gmail, gmailSyncing, syncGmail } = useAppData();
+  const navigate = useNavigate();
+  const connected = gmail?.connected ?? false;
+  const syncDates = (gmail?.providers ?? [])
+    .map((p) => p.last_sync_at)
+    .filter((d): d is string => !!d)
+    .sort();
+  const lastSync = syncDates[syncDates.length - 1];
+
+  async function quickSync() {
+    if (!connected) {
+      navigate("/settings");
+      onClose();
+      return;
+    }
+    try {
+      await syncGmail({ maxResults: 200 });
+    } catch {
+      navigate("/settings");
+    }
+  }
+
   return (
     <>
       {open && (
@@ -85,12 +114,28 @@ export function Sidebar({
         </nav>
 
         <div className="m-3 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-4 text-white">
-          <p className="text-sm font-semibold">Sync with Gmail</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold">Gmail sync</p>
+            {connected && (
+              <span className="flex items-center gap-1 text-[11px] text-brand-100">
+                <CheckCircle2 className="h-3 w-3" /> Connected
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-xs text-brand-100">
-            Auto-import ABL, HBL &amp; NayaPay alerts straight from your inbox.
+            {connected
+              ? lastSync
+                ? `Last synced ${formatDateTime(lastSync)}`
+                : "Pull ABL & NayaPay alerts newer than your statement."
+              : "Auto-import ABL & NayaPay alerts straight from your inbox."}
           </p>
-          <button className="mt-3 w-full rounded-lg bg-white/15 py-2 text-xs font-semibold backdrop-blur transition hover:bg-white/25">
-            Connect inbox
+          <button
+            onClick={() => void quickSync()}
+            disabled={gmailSyncing}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-white/15 py-2 text-xs font-semibold backdrop-blur transition hover:bg-white/25 disabled:opacity-60"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", gmailSyncing && "animate-spin")} />
+            {gmailSyncing ? "Syncing…" : connected ? "Sync now" : "Set up inbox"}
           </button>
         </div>
       </aside>

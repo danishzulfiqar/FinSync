@@ -34,9 +34,10 @@ providers:
     display_name: "Allied Bank"
     default_currency: "PKR"
     email_senders:
-      - "REPLACE_WITH_ABL_EMAIL_SENDER"
+      - "myabl@abl.com"
     email_subject_patterns:
-      - "REPLACE_WITH_ABL_SUBJECT_REGEX"
+      - "(?i)Allied Bank Transaction Alert"   # card/account purchases & withdrawals
+      - "(?i)myABL Fund Transfer Alert"        # RAAST / funds received & sent
     email_body_patterns: []
     # ABL: no SMS ingestion required.
     sms_senders: []
@@ -46,9 +47,11 @@ providers:
     display_name: "NayaPay"
     default_currency: "PKR"
     email_senders:
-      - "REPLACE_WITH_NAYAPAY_EMAIL_SENDER"
+      - "service@nayapay.com"
     email_subject_patterns:
-      - "REPLACE_WITH_NAYAPAY_SUBJECT_REGEX"
+      - "(?i)^You got Rs"        # money received
+      - "(?i)^You sent Rs"       # money sent
+      - "(?i)Transaction at "    # card purchase / reversal
     email_body_patterns: []
     # NayaPay: no SMS ingestion required.
     sms_senders: []
@@ -61,15 +64,17 @@ providers:
 # ==========================================================================
 categorization:
   default_category: "Other"
+  # Category names mirror the FinLens catalog (keyword_rules.py) so email,
+  # SMS and statement rows land in the same buckets on the dashboard.
   rules:
     - match: "indrive"
-      category: "Transport"
+      category: "Fuel & Transport"
     - match: "careem"
-      category: "Transport"
+      category: "Fuel & Transport"
     - match: "uber"
-      category: "Transport"
+      category: "Fuel & Transport"
     - match: "foodpanda"
-      category: "Food"
+      category: "Food & Dining"
     - match: "netflix"
       category: "Subscriptions"
     - match: "spotify"
@@ -77,10 +82,10 @@ categorization:
     - match: "youtube premium"
       category: "Subscriptions"
     - match: "k-electric"
-      category: "Utilities"
+      category: "Bills & Utilities"
     - match: "ssgc"
-      category: "Utilities"
+      category: "Bills & Utilities"
     - match: "atm"
-      category: "ATM/Cash"
+      category: "Cash & ATM"
     - match: "salary"
       category: "Salary"

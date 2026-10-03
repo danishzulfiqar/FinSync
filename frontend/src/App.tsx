@@ -5,6 +5,8 @@ import { Accounts } from "./pages/Accounts";
 import { Categories } from "./pages/Categories";
 import { Upload } from "./pages/Upload";
 import { Profile } from "./pages/Profile";
+import { Predictions } from "./pages/Predictions";
+import { Settings } from "./pages/Settings";
 import { Login } from "./pages/Login";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { useAuth } from "./context/AuthContext";
@@ -71,6 +73,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Profile />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/predictions"
+        element={
+          <ProtectedRoute>
+            <Predictions />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <Settings />
           </ProtectedRoute>
         }
       />

@@ -42,10 +42,12 @@ EXPENSE_RULES: list[tuple[str, list[str]]] = [
 ]
 
 INCOME_RULES: list[tuple[str, list[str]]] = [
-    ("Salary", ["salary", "payroll", "wages", "pay"]),
+    # Refunds first: a reversed card purchase must not read as salary.
+    ("Refunds", ["refund", "reversal", "reversed", "cashback", "chargeback"]),
+    # Bare "pay" matched "NayaPay"/"easypaisa"; require a real payroll word.
+    ("Salary", ["salary", "payroll", "wages", "stipend"]),
     ("Profit & Returns", ["profit", "return", "markup", "interest", "dividend",
                           "reward"]),
-    ("Refunds", ["refund", "reversal", "cashback", "chargeback"]),
     ("Transfers In", ["ibft", "funds transfer", "transfer from", "received",
                       "raast", "inward", "credit from", "deposit"]),
 ]

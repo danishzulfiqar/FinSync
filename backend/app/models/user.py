@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy import JSON, Boolean, DateTime, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -23,6 +24,10 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(120))
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Free-form preference document; see app.schemas.preferences for the keys.
+    preferences: Mapped[dict] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), default=dict, server_default="{}"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

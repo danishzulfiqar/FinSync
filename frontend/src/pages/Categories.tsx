@@ -1,5 +1,7 @@
+import { useEffect, useMemo, useState } from "react";
 import { Layout } from "../components/layout/Layout";
 import { Card, CardHeader } from "../components/ui/Card";
+import { RangePills } from "../components/ui/RangePills";
 import {
   ChartCardSkeleton,
   TableRowsSkeleton,
@@ -8,19 +10,25 @@ import { MonthlyBars } from "../components/charts/MonthlyBars";
 import { useAppData } from "../context/AppDataContext";
 import {
   cashFlowByMonth,
+  inRange,
   incomeByCategory,
   spendingByCategory,
   topExpenses,
   type CategorySlice,
 } from "../lib/analytics";
+import type { TimeRange } from "../lib/api";
 import { formatCurrency, formatDate } from "../lib/format";
 
 export function Categories() {
-  const { categories, transactions, ready } = useAppData();
-  const spending = spendingByCategory(transactions, categories);
-  const income = incomeByCategory(transactions, categories);
-  const flow = cashFlowByMonth(transactions, categories);
-  const biggest = topExpenses(transactions, 10);
+  const { categories, flows, settings, ready } = useAppData();
+  const [range, setRange] = useState<TimeRange>(settings.defaultRange);
+  useEffect(() => setRange(settings.defaultRange), [settings.defaultRange]);
+
+  const scoped = useMemo(() => inRange(flows, range), [flows, range]);
+  const spending = spendingByCategory(scoped, categories);
+  const income = incomeByCategory(scoped, categories);
+  const flow = cashFlowByMonth(scoped, categories);
+  const biggest = topExpenses(scoped, 10);
   const budgeted = spending.filter((s) => s.budget > 0);
   const initialLoading = !ready;
 
@@ -49,11 +57,21 @@ export function Categories() {
 
   return (
     <Layout title="Categories" subtitle="Where your money comes from and goes">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <RangePills value={range} onChange={setRange} />
+        {settings.excludeInternalTransfers && (
+          <span className="text-xs text-slate-400">Internal transfers excluded</span>
+        )}
+      </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
             title="Net cash flow by month"
-            subtitle="Income minus expense (all credits and debits)"
+            subtitle={
+              settings.excludeInternalTransfers
+                ? "Income minus expense, ignoring transfers between your accounts"
+                : "Income minus expense (all credits and debits)"
+            }
           />
           <MonthlyBars data={flow} />
         </Card>

@@ -31,6 +31,8 @@ export interface Transaction {
   source: "gmail" | "statement" | "manual";
   /** Bank-printed running balance after this row (statements only). */
   balanceAfter?: number | null;
+  /** One leg of a transfer between two of the user's own accounts. */
+  transfer?: boolean;
   pending?: boolean;
 }
 

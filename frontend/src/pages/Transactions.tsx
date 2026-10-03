@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, Download, SlidersHorizontal } from "lucide-react";
 import { Layout } from "../components/layout/Layout";
 import { Card } from "../components/ui/Card";
@@ -9,7 +10,7 @@ import { formatCurrency } from "../lib/format";
 import { signedAmount } from "../lib/analytics";
 import type { Account, Category, Transaction } from "../types";
 
-type Flow = "all" | "in" | "out";
+type Flow = "all" | "in" | "out" | "transfers";
 
 function csvCell(v: unknown): string {
   return `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -60,12 +61,25 @@ function exportCsv(
 }
 
 export function Transactions() {
-  const { accounts, categories, transactions, ready } = useAppData();
-  const [query, setQuery] = useState("");
+  const { accounts, categories, transactions, settings, ready } = useAppData();
+  const [params, setParams] = useSearchParams();
+  const [query, setQuery] = useState(params.get("q") ?? "");
   const [accountId, setAccountId] = useState("all");
   const [categoryId, setCategoryId] = useState("all");
   const [flow, setFlow] = useState<Flow>("all");
   const initialLoading = !ready;
+  const hasTransfers = transactions.some((t) => t.transfer);
+
+  // Topbar search lands here with ?q=; keep the box in sync when it changes.
+  useEffect(() => {
+    const q = params.get("q");
+    if (q != null) setQuery(q);
+  }, [params]);
+
+  function onQuery(next: string) {
+    setQuery(next);
+    if (params.has("q")) setParams({}, { replace: true });
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -74,6 +88,7 @@ export function Transactions() {
       if (categoryId !== "all" && t.categoryId !== categoryId) return false;
       if (flow === "in" && t.type !== "credit") return false;
       if (flow === "out" && t.type !== "debit") return false;
+      if (flow === "transfers" && !t.transfer) return false;
       if (q && !`${t.description} ${t.merchant}`.toLowerCase().includes(q))
         return false;
       return true;
@@ -83,12 +98,17 @@ export function Transactions() {
   const totals = useMemo(() => {
     let inflow = 0;
     let outflow = 0;
+    let hidden = 0;
     for (const t of filtered) {
+      if (settings.excludeInternalTransfers && t.transfer) {
+        hidden += 1;
+        continue;
+      }
       if (t.type === "credit") inflow += t.amount;
       else outflow += t.amount;
     }
-    return { inflow, outflow, net: inflow - outflow };
-  }, [filtered]);
+    return { inflow, outflow, net: inflow - outflow, hidden };
+  }, [filtered, settings.excludeInternalTransfers]);
 
   return (
     <Layout
@@ -101,7 +121,7 @@ export function Transactions() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => onQuery(e.target.value)}
               className="input pl-9"
               placeholder="Search description or merchant…"
             />
@@ -131,8 +151,11 @@ export function Transactions() {
                 </option>
               ))}
             </select>
-            <div className="flex flex-1 rounded-xl border border-slate-200 p-0.5 dark:border-slate-700 sm:flex-none">
-              {(["all", "in", "out"] as Flow[]).map((f) => (
+            <div className="flex flex-1 flex-wrap rounded-xl border border-slate-200 p-0.5 dark:border-slate-700 sm:flex-none">
+              {(hasTransfers
+                ? (["all", "in", "out", "transfers"] as Flow[])
+                : (["all", "in", "out"] as Flow[])
+              ).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFlow(f)}
@@ -142,7 +165,13 @@ export function Transactions() {
                       : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                   }`}
                 >
-                  {f === "all" ? "All" : f === "in" ? "Money in" : "Money out"}
+                  {f === "all"
+                    ? "All"
+                    : f === "in"
+                      ? "Money in"
+                      : f === "out"
+                        ? "Money out"
+                        : "Transfers"}
                 </button>
               ))}
             </div>
@@ -166,6 +195,11 @@ export function Transactions() {
             tone={totals.net >= 0 ? "green" : "red"}
           />
         </div>
+        {totals.hidden > 0 && (
+          <p className="mt-2 text-xs text-slate-400">
+            {totals.hidden} internal transfer leg{totals.hidden === 1 ? "" : "s"} excluded from these totals.
+          </p>
+        )}
       </Card>
 
       <Card className="mt-4 p-0">

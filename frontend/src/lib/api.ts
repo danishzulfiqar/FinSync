@@ -221,3 +221,65 @@ export interface TransactionListResponse {
   limit: number;
   offset: number;
 }
+
+// ---- Preferences DTOs ----
+
+export type TimeRange = "1m" | "3m" | "6m" | "1y" | "all";
+
+export interface PreferencesOut {
+  exclude_internal_transfers: boolean;
+  transfer_window_days: number;
+  privacy_mode: boolean;
+  default_range: TimeRange;
+  forecast_horizon: number;
+}
+
+export type PreferencesPatch = Partial<PreferencesOut>;
+
+// ---- Gmail sync DTOs ----
+
+export interface GmailProviderStatus {
+  key: string;
+  label: string;
+  configured: boolean;
+  last_sync_at: string | null;
+  latest_transaction_at: string | null;
+}
+
+export interface GmailStatus {
+  connected: boolean;
+  providers: GmailProviderStatus[];
+}
+
+export interface GmailSyncPreviewRow {
+  date: string | null;
+  type: "credit" | "debit";
+  amount: number;
+  currency: string;
+  merchant: string | null;
+  reference: string | null;
+  subject: string;
+}
+
+export interface GmailProviderSyncResult {
+  provider: string;
+  query: string;
+  after: string | null;
+  matched: number;
+  parsed: number;
+  created: number;
+  duplicates: number;
+  linked: number;
+  needs_review: number;
+  skipped: number;
+  account_id: number | null;
+  adopted: number;
+  preview: GmailSyncPreviewRow[];
+}
+
+export interface GmailSyncResponse {
+  status: string;
+  dry_run: boolean;
+  totals: Record<string, number>;
+  providers: GmailProviderSyncResult[];
+}

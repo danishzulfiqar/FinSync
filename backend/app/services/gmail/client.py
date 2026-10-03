@@ -14,8 +14,10 @@ needs to change when message layouts change.
 from __future__ import annotations
 
 import base64
+import re
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from html import unescape
 
 from googleapiclient.discovery import build
 
@@ -90,22 +92,52 @@ def fetch_email(service, message_id: str) -> EmailMessage:
 
 
 def _extract_body(payload: dict) -> str:
-    """Recursively extract the text/plain (fallback text/html) body."""
+    """Return the most useful readable body text.
+
+    Prefers a substantive ``text/plain`` part, but some providers (e.g. NayaPay)
+    ship a 1-byte placeholder ``text/plain`` and put the real content in
+    ``text/html`` — so we fall back to HTML converted to text whenever the plain
+    part is empty.
+    """
+    plain, html = _collect_bodies(payload)
+    if plain and len(plain.strip()) > 1:
+        return plain
+    if html:
+        return html_to_text(html)
+    return plain or ""
+
+
+def _collect_bodies(payload: dict) -> tuple[str, str]:
+    """Walk the MIME tree, returning the first (text/plain, text/html) decoded."""
+    plain = ""
+    html = ""
     mime = payload.get("mimeType", "")
     data = payload.get("body", {}).get("data")
-    if mime == "text/plain" and data:
-        return _decode(data)
-
-    html_fallback = ""
+    if data:
+        if mime == "text/plain":
+            plain = _decode(data)
+        elif mime == "text/html":
+            html = _decode(data)
     for part in payload.get("parts", []) or []:
-        text = _extract_body(part)
-        if part.get("mimeType") == "text/plain" and text:
-            return text
-        if part.get("mimeType") == "text/html" and text:
-            html_fallback = text
-    if data and mime == "text/html":
-        return _decode(data)
-    return html_fallback
+        p, h = _collect_bodies(part)
+        plain = plain or p
+        html = html or h
+    return plain, html
+
+
+def html_to_text(html: str) -> str:
+    """Flatten an HTML email body into readable, line-preserving plain text."""
+    if not html:
+        return ""
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</(p|div|tr|table|h[1-6]|li)>", "\n", text)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    text = unescape(text).replace("\u00a0", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n[ \t]+", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def _decode(data: str) -> str:
