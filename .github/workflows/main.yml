@@ -1,14 +1,15 @@
-name: CI
+name: Main CI
 
+# Full suite for main: unit tests + frontend build + Docker container health check.
 on:
   push:
-    branches: [main, gmail-integration]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: main-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
