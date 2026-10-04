@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import IO
 
@@ -60,6 +61,17 @@ LAYOUTS: dict[str, dict] = {
         "header_bottom": 218.0,
         "footer_re": None,
         "order": "desc",
+    },
+    # NayaPay statements use a signed AMOUNT column + a running BALANCE instead of
+    # separate debit/credit columns, with multi-line descriptions, so they are
+    # parsed by a dedicated routine (:func:`_parse_nayapay`) rather than the
+    # x-anchor engine. Kept here only so detection stays table-driven.
+    "nayapay": {
+        "detect": lambda t: "NayaPay" in t
+        and "Account Statement" in t
+        and ("NayaPay ID" in t or "nayapay.com" in t),
+        "date_fmt": "%d %b %Y",
+        "order": "asc",
     },
 }
 
@@ -157,6 +169,8 @@ def parse_statement(
 
     with pdf:
         layout_name = _detect_layout(pdf.pages[0].extract_text() or "")
+        if layout_name == "nayapay":
+            return _parse_nayapay(pdf, name)
         layout = LAYOUTS[layout_name]
         anchors = layout["anchors"]
 
@@ -215,3 +229,230 @@ def _looks_like_password_error(exc: Exception) -> bool:
     name = type(exc).__name__.lower()
     msg = str(exc).lower()
     return "password" in name or "password" in msg or "encrypt" in msg
+
+
+# --------------------------------------------------------------------------- #
+# NayaPay statement parser                                                     #
+# --------------------------------------------------------------------------- #
+# NayaPay lays each transaction out as a vertical band: the top line carries the
+# date, type, first description line, signed AMOUNT and running BALANCE; the
+# lines below it continue the time, type and description (counterparty, bank,
+# transaction id, fees). A signed "+Rs"/"-Rs" amount appears on exactly one line
+# per transaction, so we treat any line containing one as the start of a new
+# transaction (independent of column geometry, which varies between PDFs) and
+# fold the lines beneath it into that transaction. Columns are still used to pull
+# the type and description apart once the boundary is known.
+
+_NP_HEADERS = ("TIME", "TYPE", "DESCRIPTION", "AMOUNT", "BALANCE")
+_NP_DATE_RE = re.compile(r"\b\d{1,2}\s[A-Za-z]{3}\s\d{4}\b")
+_NP_TIME_RE = re.compile(r"\b\d{1,2}:\d{2}\s?[AP]M\b", re.IGNORECASE)
+# A signed transaction amount: sign + Rs + value (value may omit decimals).
+_NP_AMOUNT_RE = re.compile(r"([+-])\s*Rs\.?\s*([\d,]+(?:\.\d{1,2})?)", re.IGNORECASE)
+_NP_BAL_RE = re.compile(r"Rs\.?\s*([\d,]+\.\d{2})", re.IGNORECASE)
+_NP_TXID_RE = re.compile(r"Transaction ID\s+([A-Za-z0-9]+)", re.IGNORECASE)
+_NP_CARD_RE = re.compile(r"Visa[\sxX\u25cf\u2022*]*?(\d{4})", re.IGNORECASE)
+# Counterparty bank sits at the tail of a transfer line, e.g. "easypaisa Bank-3049",
+# "HBL-5003", "JazzCash/Mobilink MFB-3338"; everything before it is the name.
+_NP_BANK_RE = re.compile(r"^(.+?)\s+([\w/]+(?:\s(?:Bank|MFB))?-\d{3,})$", re.IGNORECASE)
+_NP_TRANSFER_RE = re.compile(
+    r"(?i)\b(Outgoing fund transfer to|Incoming fund transfer from)\s+"
+    r"(.+?)(?:\s+Transaction ID|\s+Service Charges|\s+Fees and|$)"
+)
+_NP_CARD_PAID_RE = re.compile(
+    r"(?i)(Reversed:\s*)?Paid to\s+"
+    r"(.+?)(?:\s+Visa\b|\s+Fees and\b|\s+Service Charges\b|\s+USD\b|$)"
+)
+
+
+def _np_header_centres(lines: list[list[dict]]):
+    """Return ([(LABEL, x_centre), ...] sorted by x, header_top) for the column
+    header row, or (None, None) when this page has no header."""
+    for line in lines:
+        labels = [w for w in line if w["text"].upper() in _NP_HEADERS]
+        if len(labels) >= 3:
+            ordered = sorted(
+                ((w["text"].upper(), (w["x0"] + w["x1"]) / 2) for w in labels),
+                key=lambda lc: lc[1],
+            )
+            return ordered, line[0]["top"]
+    return None, None
+
+
+def _np_column(centre: float, ordered: list[tuple[str, float]]) -> str:
+    return min(ordered, key=lambda lc: abs(lc[1] - centre))[0]
+
+
+def _np_describe(joined: str, sign: str) -> dict:
+    """Pull a human description + counterparty out of a NayaPay description blob."""
+    # Columns occasionally leak a date, time, amount or balance into the
+    # description; strip those before interpreting the text.
+    joined = _NP_DATE_RE.sub(" ", joined)
+    joined = _NP_TIME_RE.sub(" ", joined)
+    joined = _NP_AMOUNT_RE.sub(" ", joined)
+    joined = re.sub(r"Rs\.?\s*[\d,]+(?:\.\d{1,2})?", " ", joined)
+    joined = re.sub(r"\s{2,}", " ", joined).strip()
+
+    ref_m = _NP_TXID_RE.search(joined)
+    reference = ref_m.group(1) if ref_m else None
+    card_m = _NP_CARD_RE.search(joined)
+    card_last4 = f"****{card_m.group(1)}" if card_m else None
+
+    transfer = _NP_TRANSFER_RE.search(joined)
+    if transfer:
+        incoming = "from" in transfer.group(1).lower()
+        name_bank = transfer.group(2).strip()
+        bank_m = _NP_BANK_RE.match(name_bank)
+        name, bank = (bank_m.group(1).strip(), bank_m.group(2).strip()) if bank_m else (name_bank, None)
+        desc = f"Received from {name}" if incoming else f"Sent to {name}"
+        if bank:
+            desc = f"{desc} · {bank}"
+        return {"description": desc, "merchant": name, "reference": reference, "card_last4": card_last4}
+
+    paid = _NP_CARD_PAID_RE.search(joined)
+    if paid:
+        reversed_ = bool(paid.group(1)) or sign == "+"
+        merchant = paid.group(2).strip()
+        desc = f"Refund from {merchant}" if reversed_ else f"Paid to {merchant}"
+        return {"description": desc, "merchant": merchant, "reference": reference, "card_last4": card_last4}
+
+    if re.search(r"(?i)Multiple Merchants", joined):
+        return {
+            "description": "International card transaction",
+            "merchant": "Multiple Merchants",
+            "reference": reference,
+            "card_last4": card_last4,
+        }
+
+    clean = re.split(r"(?i)\s+(?:Transaction ID|Service Charges|Fees and Government)", joined)[0].strip()
+    return {"description": clean or None, "merchant": None, "reference": reference, "card_last4": card_last4}
+
+
+def _np_finalize(block: dict) -> dict | None:
+    joined_text = " ".join(t for t in block["text"] if t)
+    date_m = _NP_DATE_RE.search(joined_text)
+    if not date_m or not block["sign"] or block["amount"] is None:
+        return None
+    try:
+        if Decimal(block["amount"]) == 0:
+            return None  # zero-value card authorisations move no money
+    except (InvalidOperation, ValueError):
+        return None
+    time_m = _NP_TIME_RE.search(joined_text)
+    parsed = _np_describe(" ".join(d for d in block["desc"] if d).strip(), block["sign"])
+    return {
+        "date": date_m.group(0),
+        "time": time_m.group(0) if time_m else None,
+        "type": " ".join(t for t in block["type"] if t).strip() or None,
+        "description": parsed["description"],
+        "merchant": parsed["merchant"],
+        "reference": parsed["reference"],
+        "account_identifier": parsed["card_last4"],
+        "debit": None if block["sign"] == "+" else block["amount"],
+        "credit": block["amount"] if block["sign"] == "+" else None,
+        "balance": block["balance"],
+    }
+
+
+def _np_metadata(text: str, rows: list[dict], source_name: str, pages: int) -> dict:
+    id_m = re.search(r"\b(03\d{9})\b", text)
+    iban_m = re.search(r"\b(PK\d{2}NAYA\w+)", text)
+    iban = iban_m.group(1) if iban_m else None
+    account_number = id_m.group(1) if id_m else None
+    if account_number is None and iban:
+        tail = re.search(r"(03\d{9})$", iban)
+        account_number = tail.group(1) if tail else None
+
+    holder_m = re.search(r"([A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+)+)\s*\n\s*\S+@\S+", text)
+    holder = holder_m.group(1).strip() if holder_m else None
+
+    opening = closing = None
+    if rows:
+        first, last = rows[0], rows[-1]
+        first_amount = first.get("credit") or first.get("debit")
+        signed = (
+            (Decimal(first["credit"]) if first.get("credit") else -Decimal(first["debit"]))
+            if first_amount is not None
+            else Decimal(0)
+        )
+        first_balance = Decimal(str(first["balance"]).replace(",", ""))
+        opening = str(first_balance - signed)
+        closing = str(Decimal(str(last["balance"]).replace(",", "")))
+
+    return {
+        "account_number": account_number,
+        "account_title": holder,
+        "iban": iban,
+        "currency": "PKR",
+        "opening_balance": opening,
+        "closing_balance": closing,
+        "layout": "nayapay",
+        "date_fmt": "%d %b %Y",
+        "order": "asc",
+        "source_file": source_name,
+        "pages": pages,
+    }
+
+
+def _parse_nayapay(pdf, source_name: str) -> Statement:
+    """Parse a NayaPay account statement into a :class:`Statement`."""
+    stmt = Statement()
+    ordered: list[tuple[str, float]] | None = None
+    blocks: list[dict] = []
+
+    for page in pdf.pages:
+        lines = _group_words_into_lines(page.extract_words(keep_blank_chars=False))
+        centres, header_top = _np_header_centres(lines)
+        if centres:
+            ordered = centres
+        if ordered is None:
+            continue
+
+        current: dict | None = None
+        for line in lines:
+            if header_top is not None and line[0]["top"] <= header_top + 2:
+                continue
+            words = sorted(line, key=lambda w: w["x0"])
+            full_text = " ".join(w["text"] for w in words)
+            cols: dict[str, list[str]] = {label: [] for label, _ in ordered}
+            for w in words:
+                cols[_np_column((w["x0"] + w["x1"]) / 2, ordered)].append(w["text"])
+            amount_col = " ".join(cols.get("AMOUNT", []))
+            balance_col = " ".join(cols.get("BALANCE", []))
+            desc_text = " ".join(cols.get("DESCRIPTION", []))
+            type_text = " ".join(cols.get("TYPE", []))
+
+            # A signed "+Rs"/"-Rs" amount appears once per transaction and marks
+            # its top line, wherever the columns place it.
+            amt_m = _NP_AMOUNT_RE.search(full_text)
+            if amt_m:
+                tail = full_text[amt_m.end():]
+                bal_m = _NP_BAL_RE.search(tail) or _NP_BAL_RE.search(balance_col)
+                # A narrow description column can push its trailing words into the
+                # AMOUNT column; recover the text that sits before the sign.
+                overflow = re.split(r"[+-]\s*Rs", amount_col, maxsplit=1)[0].strip()
+                desc_parts = [desc_text] if desc_text else []
+                if overflow and re.search(r"[A-Za-z]", overflow):
+                    desc_parts.append(overflow)
+                current = {
+                    "sign": amt_m.group(1),
+                    "amount": amt_m.group(2).replace(",", ""),
+                    "balance": bal_m.group(1).replace(",", "") if bal_m else None,
+                    "type": [type_text] if type_text else [],
+                    "text": [full_text],
+                    "desc": desc_parts,
+                }
+                blocks.append(current)
+            elif current is not None:
+                current["text"].append(full_text)
+                if bal_m := _NP_BAL_RE.search(balance_col):
+                    if current["balance"] is None:
+                        current["balance"] = bal_m.group(1).replace(",", "")
+                if type_text:
+                    current["type"].append(type_text)
+                if desc_text:
+                    current["desc"].append(desc_text)
+
+    stmt.transactions = [row for row in (_np_finalize(b) for b in blocks) if row]
+    first_text = pdf.pages[0].extract_text() or "" if pdf.pages else ""
+    stmt.metadata = _np_metadata(first_text, stmt.transactions, source_name, len(pdf.pages))
+    return stmt

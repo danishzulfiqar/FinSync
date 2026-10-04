@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -54,7 +54,7 @@ def sync_user_gmail(
     providers: list[str] | None = None,
     start_date: str | None = None,
     before: str | None = None,
-    max_results: int = 100,
+    max_results: int | None = None,
     dry_run: bool = False,
 ) -> list[ProviderSyncResult]:
     """Sync one user's Gmail notifications into normalized transactions."""
@@ -141,10 +141,13 @@ def sync_user_gmail(
 
 
 def _latest_date(db: Session, user_id: int, provider_value: str) -> str | None:
-    """Latest transaction date (Gmail ``after:`` format) for user + provider.
+    """Gmail ``after:`` anchor for a user + provider.
 
-    This is the statement's closing date on the first sync, then the newest
-    synced email on subsequent runs — giving incremental, idempotent syncs.
+    Anchors at the newest transaction on record minus a lookback buffer. The
+    buffer lets syncs backfill any recently-missed emails (ingestion is
+    idempotent, so re-seen rows are deduped) instead of permanently skipping a
+    gap the moment a newer transaction lands. Returns ``None`` (full history)
+    when the user has no transactions for the provider yet.
     """
     latest = db.execute(
         select(func.max(Transaction.transaction_datetime)).where(
@@ -154,7 +157,14 @@ def _latest_date(db: Session, user_id: int, provider_value: str) -> str | None:
     ).scalar_one()
     if latest is None:
         return None
-    return latest.astimezone(timezone.utc).strftime("%Y/%m/%d")
+    anchor = latest.astimezone(timezone.utc) - timedelta(days=_SYNC_LOOKBACK_DAYS)
+    return anchor.strftime("%Y/%m/%d")
+
+
+# How far before the newest known transaction each sync re-scans, so a gap left
+# by an earlier partial sync (or a late-delivered email) is filled in rather
+# than skipped forever.
+_SYNC_LOOKBACK_DAYS = 45
 
 
 _PROVIDER_META: dict[str, tuple[str, str, str]] = {

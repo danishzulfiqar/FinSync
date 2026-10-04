@@ -39,6 +39,11 @@ _DST_TITLE_RE = re.compile(r"(?i)Destination\s+Acc\.?\s+Title\s*\n?\s*([^\n]+)")
 _SUBJ_FROM_RE = re.compile(r"(?i)\bfrom\s+(.+)$")
 _SUBJ_TO_RE = re.compile(r"(?i)\bto\s+(.+)$")
 _MERCHANT_RE = re.compile(r"(?i)Transaction\s+at\s+(.+?)(?:\s+reversed)?\s*$")
+# Card emails whose subject is generic ("Transaction failed, amount reversed!")
+# still name the merchant in the body: "...transaction of Rs. 375.72 at RENDER.COM US was...".
+_CARD_BODY_MERCHANT_RE = re.compile(
+    r"(?i)transaction of\s+Rs\.?\s*[\d,.]+\s+at\s+(.+?)\s+(?:was|is|for|on)\b"
+)
 _CARD_LAST4_RE = re.compile(r"(?i)Visa[\s●•*xX]*?(\d{4})")
 
 # Signals that a card event is a reversal/refund (money back) rather than a spend.
@@ -114,15 +119,17 @@ class NayapayEmailParser(BaseParser):
         account_identifier = f"****{last4.group(1)}" if last4 else None
 
         if layout == "nayapay_card":
-            merchant_m = _MERCHANT_RE.search(subject)
-            counterparty = _strip_emoji(merchant_m.group(1)) if merchant_m else counterparty
-            description = (
-                "NayaPay card reversal"
-                if tx_type == TransactionType.CREDIT
-                else "NayaPay card transaction"
-            )
+            merchant_m = _MERCHANT_RE.search(subject) or _CARD_BODY_MERCHANT_RE.search(body)
+            if merchant_m:
+                counterparty = _strip_emoji(merchant_m.group(1))
+            if tx_type == TransactionType.CREDIT:
+                description = f"Refund from {counterparty}" if counterparty else "NayaPay card reversal"
+            else:
+                description = f"Paid to {counterparty}" if counterparty else "NayaPay card transaction"
+        elif tx_type == TransactionType.CREDIT:
+            description = f"Received from {counterparty}" if counterparty else "NayaPay money received"
         else:
-            description = "NayaPay money received" if tx_type == TransactionType.CREDIT else "NayaPay money sent"
+            description = f"Sent to {counterparty}" if counterparty else "NayaPay money sent"
 
         return ParsedTransaction(
             provider=Provider.NAYAPAY,

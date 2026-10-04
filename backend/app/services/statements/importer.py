@@ -27,9 +27,9 @@ from app.schemas.statement import (
 from app.services.categorization.keyword_rules import categorize_by_keywords
 from app.services.ingestion.pipeline import ingest_parsed_transaction
 from app.parsers.statement_pdf import Statement, StatementError, parse_statement
-from app.utils.fingerprint import raw_message_hash
+from app.utils.fingerprint import raw_message_hash, statement_fingerprint_extra
 
-_LAYOUT_PROVIDER = {"myabl": Provider.ABL, "hbl": Provider.HBL}
+_LAYOUT_PROVIDER = {"myabl": Provider.ABL, "hbl": Provider.HBL, "nayapay": Provider.NAYAPAY}
 
 # Mirrors the frontend PROVIDERS palette so auto-created accounts look native.
 _PROVIDER_META = {
@@ -37,6 +37,8 @@ _PROVIDER_META = {
     Provider.HBL: ("HBL", "#16a34a"),
     Provider.NAYAPAY: ("NayaPay", "#7c3aed"),
 }
+# Account "type" used when auto-creating an account from a statement.
+_PROVIDER_TYPE = {Provider.NAYAPAY: "wallet"}
 _PLACEHOLDER_MASK = "•••• 0000"
 
 PREVIEW_LIMIT = 25
@@ -58,6 +60,24 @@ def _parse_date(value: str | None, fmt: str | None) -> datetime | None:
         return None
     try:
         return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _nayapay_datetime(date_str: str | None, time_str: str | None) -> datetime | None:
+    """NayaPay rows carry a wall-clock time; keep it so same-day transactions
+    stay ordered. Falls back to the date alone when no time was captured."""
+    if not date_str:
+        return None
+    if time_str:
+        try:
+            return datetime.strptime(f"{date_str} {time_str}", "%d %b %Y %I:%M %p").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+            pass
+    try:
+        return datetime.strptime(date_str, "%d %b %Y").replace(tzinfo=timezone.utc)
     except ValueError:
         return None
 
@@ -106,14 +126,20 @@ def statement_to_parsed(stmt: Statement) -> list[tuple[ParsedTransaction, str]]:
             row.get("balance"),
             str(index),
         )
+        if provider is Provider.NAYAPAY:
+            tx_datetime = _nayapay_datetime(row.get("date"), row.get("time"))
+        else:
+            tx_datetime = _parse_date(row.get("date"), date_fmt)
         parsed = ParsedTransaction(
             provider=provider,
             transaction_type=tx_type,
             amount=amount,
             currency=currency,
-            account_identifier=account_number,
-            transaction_datetime=_parse_date(row.get("date"), date_fmt),
+            account_identifier=row.get("account_identifier") or account_number,
+            transaction_datetime=tx_datetime,
+            merchant=row.get("merchant"),
             description=description,
+            reference=row.get("reference"),
             balance_after=_to_decimal(row.get("balance")),
             source_type=SourceType.STATEMENT,
             source_message_id=row_key,
@@ -204,7 +230,7 @@ def resolve_account(
             user_id=user_id,
             name=title or f"{label} {mask[-4:]}",
             provider=provider_key,
-            type="current",
+            type=_PROVIDER_TYPE.get(provider, "current"),
             mask=mask,
             opening_balance=opening,
             currency=currency,
@@ -302,7 +328,9 @@ def import_statement(
             user_id=user_id,
             account_id=account_id,
             probable_enabled=False,  # statement rows are authoritative; keep every row
-            fingerprint_extra=row_key,
+            # Dedup on the running balance, not the file+row index, so the same
+            # transaction re-imported from an overlapping statement is caught.
+            fingerprint_extra=statement_fingerprint_extra(tx.balance_after, tx.description),
         )
         if outcome.status == "created":
             result.created += 1

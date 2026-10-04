@@ -81,7 +81,12 @@ def sync_gmail(
         description="Override Gmail after: YYYY/MM/DD. Defaults to the latest transaction on record.",
     ),
     end_date: str | None = Query(default=None, description="Gmail before: YYYY/MM/DD"),
-    max_results: int = Query(default=100, ge=1, le=500),
+    max_results: int | None = Query(
+        default=None,
+        ge=1,
+        le=2000,
+        description="Cap on messages scanned per provider. Omit to scan all matches.",
+    ),
     dry_run: bool = Query(default=False, description="Parse & preview without saving."),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

@@ -49,22 +49,28 @@ def build_query(senders: list[str], after: str | None = None, before: str | None
     return " ".join(parts)
 
 
-def list_message_ids(service, query: str, max_results: int = 100) -> list[str]:
-    """List message ids matching a query, following pagination."""
+def list_message_ids(service, query: str, max_results: int | None = None) -> list[str]:
+    """List message ids matching a query, following pagination.
+
+    ``max_results=None`` walks every page so no matching message is dropped
+    (Gmail returns newest-first, so a hard cap would silently lose the oldest
+    transactions). A positive cap stops once that many ids are collected.
+    """
     ids: list[str] = []
     page_token: str | None = None
     while True:
+        page_size = 500 if max_results is None else min(max_results, 500)
         resp = (
             service.users()
             .messages()
-            .list(userId="me", q=query, maxResults=min(max_results, 500), pageToken=page_token)
+            .list(userId="me", q=query, maxResults=page_size, pageToken=page_token)
             .execute()
         )
         ids.extend(m["id"] for m in resp.get("messages", []))
         page_token = resp.get("nextPageToken")
-        if not page_token or len(ids) >= max_results:
+        if not page_token or (max_results is not None and len(ids) >= max_results):
             break
-    return ids[:max_results]
+    return ids if max_results is None else ids[:max_results]
 
 
 def fetch_email(service, message_id: str) -> EmailMessage:

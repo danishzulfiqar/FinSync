@@ -49,19 +49,65 @@ def compute_fingerprint(
     share provider+type+amount+date) that keeps distinct rows distinct while
     staying deterministic across re-uploads.
     """
+    return fingerprint_from_fields(
+        provider=tx.provider.value,
+        transaction_type=tx.transaction_type.value,
+        amount=tx.amount,
+        currency=tx.currency,
+        account_identifier=tx.account_identifier,
+        reference=tx.reference,
+        transaction_datetime=tx.transaction_datetime,
+        time_window_seconds=time_window_seconds,
+        user_id=user_id,
+        extra=extra,
+    )
+
+
+def fingerprint_from_fields(
+    *,
+    provider: str,
+    transaction_type: str,
+    amount: Decimal | None,
+    currency: str | None,
+    account_identifier: str | None,
+    reference: str | None,
+    transaction_datetime: datetime | None,
+    time_window_seconds: int = 180,
+    user_id: int | None = None,
+    extra: str | None = None,
+) -> str:
+    """Primitive-field fingerprint — the single source of truth shared by the
+    ingestion pipeline and the de-duplication maintenance script, so a stored
+    record and a freshly parsed re-import always agree."""
     parts = [
         "" if user_id is None else str(user_id),
-        tx.provider.value,
-        tx.transaction_type.value,
-        _norm_amount(tx.amount),
-        (tx.currency or "PKR").upper(),
-        (tx.account_identifier or "").lower(),
-        (tx.reference or "").lower(),
-        _time_bucket(tx.transaction_datetime, time_window_seconds),
+        provider,
+        transaction_type,
+        _norm_amount(amount),
+        (currency or "PKR").upper(),
+        (account_identifier or "").lower(),
+        (reference or "").lower(),
+        _time_bucket(transaction_datetime, time_window_seconds),
         (extra or "").lower(),
     ]
     raw = "|".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def statement_fingerprint_extra(
+    balance_after: Decimal | None, description: str | None
+) -> str:
+    """Stable per-row discriminator for statement dedup.
+
+    The printed running balance is unique to a row's position in the ledger, so
+    the same transaction re-imported from an overlapping statement collides
+    regardless of the PDF's file name or the row's index. Falls back to the
+    description when a statement omits balances.
+    """
+    if balance_after is not None:
+        return f"bal:{Decimal(balance_after):.2f}"
+    return f"desc:{(description or '').strip().lower()}"
+
 
 
 def raw_message_hash(*parts: str | None) -> str:
