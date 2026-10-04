@@ -22,12 +22,19 @@ from html import unescape
 from googleapiclient.discovery import build
 
 from app.parsers.base import EmailMessage
-from app.services.gmail.oauth import load_credentials
+from app.services.gmail.oauth import load_credentials, load_user_credentials
 
 
-def build_service():
-    """Return an authenticated Gmail API service, or None if not authorized."""
-    creds = load_credentials()
+def build_service(db=None, user_id=None):
+    """Return an authenticated Gmail API service, or None if not authorized.
+
+    Prefers DB-stored credentials when a session + user id are given (web app);
+    otherwise falls back to the file-based credentials (local dev script/notebook).
+    """
+    if db is not None and user_id is not None:
+        creds = load_user_credentials(db, user_id)
+    else:
+        creds = load_credentials()
     if creds is None:
         return None
     return build("gmail", "v1", credentials=creds, cache_discovery=False)

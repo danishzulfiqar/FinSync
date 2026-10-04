@@ -48,7 +48,13 @@ class Settings(BaseSettings):
     gmail_client_secret_file: str = "secrets/gmail_client_secret.json"
     gmail_token_file: str = "secrets/gmail_token.json"
     gmail_scopes: str = "https://www.googleapis.com/auth/gmail.readonly"
-    gmail_oauth_redirect_uri: str = "http://localhost:8765/oauth2callback"
+    # Web OAuth client credentials (preferred on hosts with no secret file / disk).
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    # Backend callback Google redirects to after consent (must match the Cloud client).
+    gmail_oauth_redirect_uri: str = "http://localhost:8000/api/v1/sync/gmail/callback"
+    # Where the backend sends the browser back to once authorization completes.
+    frontend_url: str = ""
 
     # Providers config
     providers_config_file: str = "providers.yaml"
@@ -79,6 +85,16 @@ class Settings(BaseSettings):
     @property
     def gmail_scope_list(self) -> list[str]:
         return [s.strip() for s in self.gmail_scopes.split(",") if s.strip()]
+
+    @property
+    def frontend_base_url(self) -> str:
+        """Where to return the browser after Gmail OAuth: explicit, else first CORS origin, else local dev."""
+        if self.frontend_url.strip():
+            return self.frontend_url.strip().rstrip("/")
+        for origin in self.cors_origin_list:
+            if origin.startswith("http"):
+                return origin.rstrip("/")
+        return "http://localhost:5173"
 
     @property
     def hbl_sms_sender_list(self) -> list[str]:

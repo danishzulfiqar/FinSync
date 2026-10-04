@@ -24,7 +24,7 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.parsers import get_email_parser
 from app.services.gmail.client import build_service
-from app.services.gmail.oauth import load_credentials
+from app.services.gmail.oauth import load_user_credentials
 from app.services.gmail.sync import sync_user_gmail
 
 router = APIRouter(tags=["sync"])
@@ -37,7 +37,7 @@ def gmail_status(
 ) -> dict:
     """Whether the inbox is authorized and, per provider, where the sync stands."""
     try:
-        connected = load_credentials() is not None
+        connected = load_user_credentials(db, current_user.id) is not None
     except Exception:  # expired/revoked refresh token, unreachable Google, etc.
         connected = False
 
@@ -92,16 +92,16 @@ def sync_gmail(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     try:
-        service = build_service()
+        service = build_service(db, current_user.id)
     except Exception as exc:  # revoked/expired refresh token surfaces here
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
-            detail=f"Gmail authorization failed: {exc}. Re-run scripts/gmail_authorize.py.",
+            detail=f"Gmail authorization failed: {exc}. Reconnect Gmail from Settings.",
         ) from exc
     if service is None:
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
-            detail="Gmail not authorized. Run scripts/gmail_authorize.py first.",
+            detail="Gmail not authorized. Connect Gmail from Settings first.",
         )
 
     results = sync_user_gmail(

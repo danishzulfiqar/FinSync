@@ -11,7 +11,9 @@ from app.api.routes import (
     analytics,
     auth,
     export,
+    gmail_oauth,
     health,
+    maintenance,
     preferences,
     statements,
     sync,
@@ -46,6 +48,9 @@ prefix = settings.api_v1_prefix
 # Public: authentication + inbound SMS webhooks (own HMAC auth).
 app.include_router(auth.router, prefix=prefix)
 app.include_router(webhooks.router, prefix=prefix)
+# Gmail OAuth: callback is public (Google can't send a bearer token); the
+# authorize endpoint enforces auth via its own dependency.
+app.include_router(gmail_oauth.router, prefix=prefix)
 
 # Protected: require a valid bearer token.
 protected = [Depends(get_current_user)]
@@ -56,6 +61,7 @@ app.include_router(analytics.router, prefix=prefix, dependencies=protected)
 app.include_router(export.router, prefix=prefix, dependencies=protected)
 app.include_router(statements.router, prefix=prefix, dependencies=protected)
 app.include_router(preferences.router, prefix=prefix, dependencies=protected)
+app.include_router(maintenance.router, prefix=prefix, dependencies=protected)
 
 
 @app.get("/")

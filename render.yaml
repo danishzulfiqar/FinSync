@@ -26,4 +26,12 @@ services:
         sync: false                   # Set to your Vercel URL, e.g. https://finsync.vercel.app
       - key: DATABASE_URL
         sync: false                   # Paste your Neon connection string in the dashboard.
+      - key: GMAIL_CLIENT_ID
+        sync: false                   # Web OAuth client id from Google Cloud Console.
+      - key: GMAIL_CLIENT_SECRET
+        sync: false                   # Web OAuth client secret.
+      - key: GMAIL_OAUTH_REDIRECT_URI
+        sync: false                   # https://<this-service>.onrender.com/api/v1/sync/gmail/callback
+      - key: FRONTEND_URL
+        sync: false                   # Your Vercel URL; where users return after authorizing.
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   Mail,
@@ -25,13 +25,47 @@ import { Card, CardHeader } from "../ui/Card";
  * balances move forward from the last statement without double counting.
  */
 export function GmailSyncCard({ compact = false }: { compact?: boolean }) {
-  const { gmail, gmailSyncing, syncGmail, refreshGmailStatus } = useAppData();
+  const { gmail, gmailSyncing, syncGmail, refreshGmailStatus, connectGmail } =
+    useAppData();
   const [result, setResult] = useState<GmailSyncResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"preview" | "sync" | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   const connected = gmail?.connected ?? false;
   const providers = (gmail?.providers ?? []).filter((p) => p.configured);
+
+  // Handle the return from Google's consent screen (?gmail=connected|error).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("gmail");
+    if (!outcome) return;
+    if (outcome === "connected") void refreshGmailStatus();
+    else if (outcome === "error")
+      setError("Gmail authorization was cancelled or failed. Please try again.");
+    params.delete("gmail");
+    const qs = params.toString();
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + (qs ? `?${qs}` : "")
+    );
+  }, [refreshGmailStatus]);
+
+  async function startConnect() {
+    setError(null);
+    setConnecting(true);
+    try {
+      await connectGmail();
+    } catch (err) {
+      setConnecting(false);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not start Gmail authorization."
+      );
+    }
+  }
 
   async function run(dryRun: boolean) {
     setError(null);
@@ -67,10 +101,10 @@ export function GmailSyncCard({ compact = false }: { compact?: boolean }) {
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-semibold">Inbox not authorized on the server</p>
+            <p className="font-semibold">Inbox not connected</p>
             <p className="mt-0.5 text-xs opacity-80">
-              Run <code className="rounded bg-black/5 px-1 dark:bg-white/10">scripts/gmail_authorize.py</code>{" "}
-              on the backend host to grant read-only access, then refresh.
+              Connect your Google account to grant read-only access to the bank
+              alert emails. You&apos;ll be redirected to Google to approve.
             </p>
           </div>
         </div>
@@ -148,12 +182,12 @@ export function GmailSyncCard({ compact = false }: { compact?: boolean }) {
           </>
         ) : (
           <button
-            onClick={() => void refreshGmailStatus()}
-            disabled={gmail === null}
+            onClick={() => void startConnect()}
+            disabled={gmail === null || connecting}
             className="btn-primary flex-1"
           >
             <Inbox className="h-4 w-4" />
-            Connect inbox
+            {connecting ? "Redirecting…" : "Connect Gmail"}
           </button>
         )}
       </div>

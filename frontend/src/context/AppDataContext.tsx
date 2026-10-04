@@ -115,6 +115,8 @@ interface AppDataContextValue {
   gmailSyncing: boolean;
   refreshGmailStatus: () => Promise<void>;
   syncGmail: (opts?: GmailSyncOptions) => Promise<GmailSyncResponse>;
+  /** Start the Gmail web OAuth flow by redirecting to Google's consent screen. */
+  connectGmail: () => Promise<void>;
 }
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -177,6 +179,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch {
       setGmail({ connected: false, providers: [] });
     }
+  }, []);
+
+  const connectGmail = useCallback(async () => {
+    const { url } = await api.get<{ url: string }>("/sync/gmail/authorize");
+    window.location.href = url;
   }, []);
 
   const refresh = useCallback(async () => {
@@ -316,6 +323,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       gmailSyncing,
       refreshGmailStatus,
       syncGmail,
+      connectGmail,
     }),
     [
       accounts,
@@ -336,6 +344,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       gmailSyncing,
       refreshGmailStatus,
       syncGmail,
+      connectGmail,
     ]
   );
 
