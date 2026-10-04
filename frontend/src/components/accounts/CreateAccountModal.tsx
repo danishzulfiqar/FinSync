@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../ui/Modal";
+import { Select } from "../ui/Select";
 import type { Account, Provider } from "../../types";
 import { PROVIDERS } from "../../types";
 import { useAppData, type NewAccountInput } from "../../context/AppDataContext";
@@ -115,17 +116,17 @@ export function CreateAccountModal({
             <label className="mb-1.5 block text-xs font-semibold text-slate-500">
               Type
             </label>
-            <select
+            <Select
               value={type}
               onChange={(e) => setType(e.target.value as Account["type"])}
-              className="input"
+              wrapperClassName="w-full"
             >
               {ACCOUNT_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>
                   {t.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-semibold text-slate-500">

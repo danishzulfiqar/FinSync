@@ -7,7 +7,7 @@
  * about uncertainty rather than implying false precision.
  */
 import type { Account, Transaction } from "../types";
-import { accountBalance, balanceSeries, signedAmount } from "./analytics";
+import { balanceSeries, flowRows, signedAmount, totalBalance } from "./analytics";
 import { monthKey } from "./format";
 
 export interface ForecastPoint {
@@ -86,18 +86,16 @@ export function monthlyNet(transactions: Transaction[]): Map<string, number> {
 export function forecastBalance(
   transactions: Transaction[],
   accounts: Account[],
-  opts: { horizon?: number; sims?: number; seed?: number } = {}
+  opts: { horizon?: number; sims?: number; seed?: number; excludeTransfers?: boolean } = {}
 ): Forecast {
   const horizon = opts.horizon ?? 6;
   const sims = opts.sims ?? 2000;
   const seed = opts.seed ?? 42;
+  const excludeTransfers = opts.excludeTransfers ?? false;
 
-  const nets = monthlyNet(transactions);
+  const nets = monthlyNet(flowRows(transactions, excludeTransfers));
   const months = [...nets.keys()];
-  const current = accounts.reduce(
-    (s, a) => s + accountBalance(a, transactions),
-    0
-  );
+  const current = totalBalance(accounts, transactions, excludeTransfers);
 
   const empty: ForecastSummary = {
     currentBalance: current,
@@ -115,7 +113,7 @@ export function forecastBalance(
 
   // Month-end balances rebuilt backwards from `current`, so the history line
   // and the forecast start from one point.
-  const history: HistoryPoint[] = balanceSeries(transactions, accounts);
+  const history: HistoryPoint[] = balanceSeries(transactions, accounts, excludeTransfers);
 
   const pool = Float64Array.from(months.map((m) => nets.get(m) ?? 0));
   const mean = pool.reduce((s, v) => s + v, 0) / pool.length;

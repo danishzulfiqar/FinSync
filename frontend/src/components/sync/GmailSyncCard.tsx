@@ -38,7 +38,8 @@ export function GmailSyncCard({ compact = false }: { compact?: boolean }) {
     setResult(null);
     setMode(dryRun ? "preview" : "sync");
     try {
-      setResult(await syncGmail({ dryRun, maxResults: 200 }));
+      // Preview is a quick sample; a real sync scans every match so nothing is dropped.
+      setResult(await syncGmail(dryRun ? { dryRun, maxResults: 50 } : { dryRun }));
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Could not reach the inbox."
@@ -126,22 +127,35 @@ export function GmailSyncCard({ compact = false }: { compact?: boolean }) {
       </ul>
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <button
-          onClick={() => void run(true)}
-          disabled={!connected || gmailSyncing}
-          className="btn-outline flex-1"
-        >
-          <Eye className="h-4 w-4" />
-          {mode === "preview" ? "Previewing…" : "Preview"}
-        </button>
-        <button
-          onClick={() => void run(false)}
-          disabled={!connected || gmailSyncing}
-          className="btn-primary flex-1"
-        >
-          <RefreshCw className={cn("h-4 w-4", mode === "sync" && "animate-spin")} />
-          {mode === "sync" ? "Syncing…" : "Sync now"}
-        </button>
+        {connected ? (
+          <>
+            <button
+              onClick={() => void run(true)}
+              disabled={gmailSyncing}
+              className="btn-outline flex-1"
+            >
+              <Eye className="h-4 w-4" />
+              {mode === "preview" ? "Previewing…" : "Preview"}
+            </button>
+            <button
+              onClick={() => void run(false)}
+              disabled={gmailSyncing}
+              className="btn-primary flex-1"
+            >
+              <RefreshCw className={cn("h-4 w-4", mode === "sync" && "animate-spin")} />
+              {mode === "sync" ? "Syncing…" : "Sync now"}
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => void refreshGmailStatus()}
+            disabled={gmail === null}
+            className="btn-primary flex-1"
+          >
+            <Inbox className="h-4 w-4" />
+            Connect inbox
+          </button>
+        )}
       </div>
 
       {error && (

@@ -20,10 +20,11 @@ export function Predictions() {
   const { transactions, flows, accounts, categories, settings, updateSettings, ready } =
     useAppData();
   const horizon = settings.forecastHorizon;
+  const ignore = settings.excludeInternalTransfers;
 
   const fc = useMemo(
-    () => forecastBalance(transactions, accounts, { horizon }),
-    [transactions, accounts, horizon]
+    () => forecastBalance(transactions, accounts, { horizon, excludeTransfers: ignore }),
+    [transactions, accounts, horizon, ignore]
   );
   const outlook = useMemo(() => nextMonthOutlook(flows, categories), [flows, categories]);
   const s = fc.summary;

@@ -1,16 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, Download, SlidersHorizontal } from "lucide-react";
+import { Search, Download, SlidersHorizontal, X } from "lucide-react";
 import { Layout } from "../components/layout/Layout";
 import { Card } from "../components/ui/Card";
+import { Select } from "../components/ui/Select";
 import { TableRowsSkeleton } from "../components/ui/Skeleton";
 import { TransactionsTable } from "../components/transactions/TransactionsTable";
 import { useAppData } from "../context/AppDataContext";
 import { formatCurrency } from "../lib/format";
-import { signedAmount } from "../lib/analytics";
+import { inRange, signedAmount } from "../lib/analytics";
+import type { TimeRange } from "../lib/api";
 import type { Account, Category, Transaction } from "../types";
 
 type Flow = "all" | "in" | "out" | "transfers";
+type Sort = "newest" | "oldest" | "largest" | "smallest";
+type RangeMode = TimeRange | "custom";
+
+const RANGE_FILTER_LABELS: Record<RangeMode, string> = {
+  all: "All time",
+  "1m": "This month",
+  "3m": "Last 3 months",
+  "6m": "Last 6 months",
+  "1y": "Last 12 months",
+  custom: "Custom range",
+};
+
+const SORT_LABELS: Record<Sort, string> = {
+  newest: "Newest first",
+  oldest: "Oldest first",
+  largest: "Largest amount",
+  smallest: "Smallest amount",
+};
 
 function csvCell(v: unknown): string {
   return `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -67,8 +87,32 @@ export function Transactions() {
   const [accountId, setAccountId] = useState("all");
   const [categoryId, setCategoryId] = useState("all");
   const [flow, setFlow] = useState<Flow>("all");
+  const [range, setRange] = useState<RangeMode>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [sort, setSort] = useState<Sort>("newest");
   const initialLoading = !ready;
   const hasTransfers = transactions.some((t) => t.transfer);
+
+  const filtersActive =
+    query.trim() !== "" ||
+    accountId !== "all" ||
+    categoryId !== "all" ||
+    flow !== "all" ||
+    range !== "all" ||
+    sort !== "newest";
+
+  function resetFilters() {
+    setQuery("");
+    setAccountId("all");
+    setCategoryId("all");
+    setFlow("all");
+    setRange("all");
+    setCustomFrom("");
+    setCustomTo("");
+    setSort("newest");
+    if (params.has("q")) setParams({}, { replace: true });
+  }
 
   // Topbar search lands here with ?q=; keep the box in sync when it changes.
   useEffect(() => {
@@ -83,7 +127,20 @@ export function Transactions() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return transactions.filter((t) => {
+    let scoped: Transaction[];
+    if (range === "custom") {
+      scoped = transactions.filter((t) => {
+        const d = t.date.slice(0, 10);
+        if (customFrom && d < customFrom) return false;
+        if (customTo && d > customTo) return false;
+        return true;
+      });
+    } else if (range === "all") {
+      scoped = transactions;
+    } else {
+      scoped = inRange(transactions, range);
+    }
+    return scoped.filter((t) => {
       if (accountId !== "all" && t.accountId !== accountId) return false;
       if (categoryId !== "all" && t.categoryId !== categoryId) return false;
       if (flow === "in" && t.type !== "credit") return false;
@@ -93,7 +150,25 @@ export function Transactions() {
         return false;
       return true;
     });
-  }, [transactions, query, accountId, categoryId, flow]);
+  }, [
+    transactions,
+    query,
+    accountId,
+    categoryId,
+    flow,
+    range,
+    customFrom,
+    customTo,
+  ]);
+
+  // `filtered` keeps the context's newest-first order; re-sort only when asked.
+  const visible = useMemo(() => {
+    if (sort === "newest") return filtered;
+    const rows = [...filtered];
+    if (sort === "oldest") return rows.reverse();
+    if (sort === "largest") return rows.sort((a, b) => b.amount - a.amount);
+    return rows.sort((a, b) => a.amount - b.amount);
+  }, [filtered, sort]);
 
   const totals = useMemo(() => {
     let inflow = 0;
@@ -116,41 +191,28 @@ export function Transactions() {
       subtitle={`${filtered.length} of ${transactions.length} records`}
     >
       <Card className="p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={(e) => onQuery(e.target.value)}
-              className="input pl-9"
-              placeholder="Search description or merchant…"
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(e) => onQuery(e.target.value)}
+                className="input pl-9"
+                placeholder="Search description or merchant…"
+              />
+            </div>
+            <button
+              onClick={() => exportCsv(visible, accounts, categories)}
+              className="btn-outline w-full sm:w-auto"
+              title="Export CSV"
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </button>
           </div>
+
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="input w-full min-w-[9rem] flex-1 sm:w-auto sm:flex-none"
-            >
-              <option value="all">All accounts</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="input w-full min-w-[9rem] flex-1 sm:w-auto sm:flex-none"
-            >
-              <option value="all">All categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
             <div className="flex flex-1 flex-wrap rounded-xl border border-slate-200 p-0.5 dark:border-slate-700 sm:flex-none">
               {(hasTransfers
                 ? (["all", "in", "out", "transfers"] as Flow[])
@@ -175,15 +237,94 @@ export function Transactions() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => exportCsv(filtered, accounts, categories)}
-              className="btn-outline w-full sm:w-auto"
-              title="Export CSV"
+            <Select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              aria-label="Filter by account"
+              wrapperClassName="min-w-[8.5rem] flex-1 sm:flex-none"
             >
-              <Download className="h-4 w-4" />
-              Export
-            </button>
+              <option value="all">All accounts</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              aria-label="Filter by category"
+              wrapperClassName="min-w-[8.5rem] flex-1 sm:flex-none"
+            >
+              <option value="all">All categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={range}
+              onChange={(e) => setRange(e.target.value as RangeMode)}
+              aria-label="Filter by date range"
+              wrapperClassName="min-w-[8.5rem] flex-1 sm:flex-none"
+            >
+              {(Object.keys(RANGE_FILTER_LABELS) as RangeMode[]).map((r) => (
+                <option key={r} value={r}>
+                  {RANGE_FILTER_LABELS[r]}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+              aria-label="Sort transactions"
+              wrapperClassName="min-w-[8.5rem] flex-1 sm:flex-none"
+            >
+              {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
+                <option key={s} value={s}>
+                  {SORT_LABELS[s]}
+                </option>
+              ))}
+            </Select>
+            {filtersActive && (
+              <button
+                onClick={resetFilters}
+                className="btn-ghost px-3 py-2 text-xs"
+                title="Clear all filters"
+              >
+                <X className="h-3.5 w-3.5" />
+                Reset
+              </button>
+            )}
           </div>
+
+          {range === "custom" && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label className="flex flex-1 items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                From
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={customTo || undefined}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  aria-label="Start date"
+                  className="input py-1.5 text-xs"
+                />
+              </label>
+              <label className="flex flex-1 items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                To
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom || undefined}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  aria-label="End date"
+                  className="input py-1.5 text-xs"
+                />
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2 border-t border-slate-100 pt-4 dark:border-slate-800 sm:grid-cols-3 sm:gap-3">
@@ -210,7 +351,7 @@ export function Transactions() {
         {initialLoading ? (
           <TableRowsSkeleton rows={10} />
         ) : (
-          <TransactionsTable transactions={filtered} />
+          <TransactionsTable transactions={visible} />
         )}
       </Card>
     </Layout>

@@ -65,7 +65,7 @@ export function Topbar({
       return;
     }
     try {
-      await syncGmail({ maxResults: 200 });
+      await syncGmail();
     } catch {
       navigate("/settings");
     }
@@ -109,8 +109,8 @@ export function Topbar({
             "relative hidden rounded-xl p-2.5 text-slate-500 hover:bg-slate-200/60 disabled:opacity-60 dark:hover:bg-slate-800 sm:block",
             gmailSyncing && "text-brand-600 dark:text-brand-400"
           )}
-          aria-label={gmail?.connected ? "Sync Gmail now" : "Set up Gmail sync"}
-          title={gmail?.connected ? "Sync Gmail now" : "Set up Gmail sync"}
+          aria-label={gmail?.connected ? "Sync Gmail now" : "Connect inbox"}
+          title={gmail?.connected ? "Sync Gmail now" : "Connect inbox"}
         >
           <RefreshCw className={cn("h-5 w-5", gmailSyncing && "animate-spin")} />
           {gmail && !gmail.connected && (

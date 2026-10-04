@@ -3,7 +3,6 @@ import {
   UploadCloud,
   FileText,
   Check,
-  Mail,
   Loader2,
   Trash2,
   AlertTriangle,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 import { Layout } from "../components/layout/Layout";
 import { Card, CardHeader } from "../components/ui/Card";
+import { GmailSyncCard } from "../components/sync/GmailSyncCard";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../context/AppDataContext";
 import {
@@ -47,7 +47,7 @@ export function Upload() {
       f.name.toLowerCase().endsWith(".pdf")
     );
     if (pdfs.length === 0) {
-      setError("Please upload PDF bank statements (ABL / HBL).");
+      setError("Please upload PDF bank statements (ABL, HBL or NayaPay).");
       return;
     }
     setError(null);
@@ -104,7 +104,7 @@ export function Upload() {
         <Card className="lg:col-span-2">
           <CardHeader
             title="Upload bank statement"
-            subtitle="Password-protected PDFs from Allied Bank (myABL) or HBL"
+            subtitle="Password-protected PDFs from Allied Bank (myABL), HBL or NayaPay"
           />
 
           <div
@@ -235,25 +235,7 @@ export function Upload() {
           )}
         </Card>
 
-        <Card>
-          <CardHeader title="Or connect Gmail" subtitle="Automatic alerts sync" />
-          <div className="flex flex-col items-center rounded-xl bg-slate-50 p-6 text-center dark:bg-slate-800/50">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-500 dark:bg-rose-500/15">
-              <Mail className="h-6 w-6" />
-            </span>
-            <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Gmail read-only
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              Pull transaction alerts from myABL, HBL &amp; NayaPay senders
-              automatically.
-            </p>
-            <button className="btn-primary mt-4 w-full" disabled>
-              Connect Gmail
-            </button>
-            <p className="mt-3 text-[11px] text-slate-400">Coming soon</p>
-          </div>
-        </Card>
+        <GmailSyncCard compact />
       </div>
 
       {result && (

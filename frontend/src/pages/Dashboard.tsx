@@ -49,28 +49,38 @@ export function Dashboard() {
   useEffect(() => setRange(settings.defaultRange), [settings.defaultRange]);
 
   const scoped = useMemo(() => inRange(flows, range), [flows, range]);
+  const ignore = settings.excludeInternalTransfers;
   const kpis = useMemo(
-    () => computeKpis(scoped, accounts, transactions),
-    [scoped, accounts, transactions]
+    () => computeKpis(scoped, accounts, transactions, ignore),
+    [scoped, accounts, transactions, ignore]
   );
   const deltas = useMemo(
-    () => periodDeltas(flows, transactions, accounts),
-    [flows, transactions, accounts]
+    () => periodDeltas(flows, transactions, accounts, ignore),
+    [flows, transactions, accounts, ignore]
   );
-  const series = useMemo(() => balanceSeries(transactions, accounts), [transactions, accounts]);
+  const series = useMemo(
+    () => balanceSeries(transactions, accounts, ignore),
+    [transactions, accounts, ignore]
+  );
   const flow = useMemo(() => cashFlowByMonth(scoped, categories), [scoped, categories]);
   const spending = useMemo(() => spendingByCategory(scoped, categories), [scoped, categories]);
-  const shares = useMemo(() => accountShares(accounts, transactions), [accounts, transactions]);
+  const shares = useMemo(
+    () => accountShares(accounts, transactions, ignore),
+    [accounts, transactions, ignore]
+  );
   const fc = useMemo(
-    () => forecastBalance(transactions, accounts, { horizon: settings.forecastHorizon, sims: 600 }),
-    [transactions, accounts, settings.forecastHorizon]
+    () =>
+      forecastBalance(transactions, accounts, {
+        horizon: settings.forecastHorizon,
+        sims: 600,
+        excludeTransfers: ignore,
+      }),
+    [transactions, accounts, settings.forecastHorizon, ignore]
   );
 
   const empty = ready && !error && transactions.length === 0;
   const initialLoading = !ready;
-  const hiddenTransfers = settings.excludeInternalTransfers
-    ? transactions.filter((t) => t.transfer).length / 2
-    : 0;
+  const hiddenTransfers = ignore ? transactions.filter((t) => t.transfer).length : 0;
   const rangeLabel =
     RANGE_MONTHS[range] == null ? "All time" : `Last ${RANGE_MONTHS[range]} month${RANGE_MONTHS[range] === 1 ? "" : "s"}`;
   const inboxStale =
@@ -119,7 +129,7 @@ export function Dashboard() {
           <Link
             to="/settings"
             className="chip bg-slate-100 text-slate-500 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
-            title="Internal transfers are excluded from income and expense"
+            title="Internal transfers are excluded from income, expense and total balance"
           >
             <ArrowLeftRight className="h-3 w-3" />
             {hiddenTransfers} transfer{hiddenTransfers === 1 ? "" : "s"} hidden
@@ -177,6 +187,13 @@ export function Dashboard() {
                 <p className="mt-1 text-xs text-slate-400">
                   {accounts.length} account{accounts.length === 1 ? "" : "s"} · {series.length} month
                   {series.length === 1 ? "" : "s"} of history
+                  {ignore && shares.elsewhere !== 0 && (
+                    <>
+                      {" "}· {shares.elsewhere > 0 ? "incl." : "less"}{" "}
+                      {formatCurrency(Math.abs(shares.elsewhere))} moved{" "}
+                      {shares.elsewhere > 0 ? "to" : "from"} your other accounts
+                    </>
+                  )}
                 </p>
                 <div className="mt-4">
                   <Sparkline
@@ -287,14 +304,14 @@ export function Dashboard() {
                   </Link>
                 }
               />
-              {shares.length === 0 ? (
+              {shares.rows.length === 0 ? (
                 <p className="py-6 text-center text-sm text-slate-400">
                   Accounts are created automatically when you import a statement.
                 </p>
               ) : (
                 <>
                   <div className="mb-4 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                    {shares.map(({ account, share }) => (
+                    {shares.rows.map(({ account, share }) => (
                       <div
                         key={account.id}
                         className="h-full first:rounded-l-full last:rounded-r-full"
@@ -302,9 +319,16 @@ export function Dashboard() {
                         title={`${account.name} · ${share.toFixed(0)}%`}
                       />
                     ))}
+                    {shares.elsewhereShare > 0 && (
+                      <div
+                        className="h-full bg-slate-300 last:rounded-r-full dark:bg-slate-600"
+                        style={{ width: `${shares.elsewhereShare}%` }}
+                        title={`Other accounts you own · ${shares.elsewhereShare.toFixed(0)}%`}
+                      />
+                    )}
                   </div>
                   <div className="space-y-3">
-                    {shares.map(({ account, balance, share, transactions: n }) => {
+                    {shares.rows.map(({ account, balance, share, transactions: n }) => {
                       const provider = PROVIDERS[account.provider];
                       return (
                         <div
@@ -336,6 +360,34 @@ export function Dashboard() {
                         </div>
                       );
                     })}
+                    {ignore && shares.elsewhere !== 0 && (
+                      <div
+                        className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 p-3 dark:border-slate-700"
+                        title="Net of transfers to and from accounts FinSync doesn't track"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                            <ArrowLeftRight className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                              Other accounts you own
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {shares.elsewhere > 0 ? "Sent to yourself" : "Received from yourself"} · not tracked here
+                            </p>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                            {formatCurrency(shares.elsewhere, { signed: shares.elsewhere < 0 })}
+                          </p>
+                          <p className="text-xs tabular-nums text-slate-400">
+                            {shares.elsewhereShare.toFixed(0)}%
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

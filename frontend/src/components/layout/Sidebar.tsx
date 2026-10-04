@@ -47,7 +47,7 @@ export function Sidebar({
       return;
     }
     try {
-      await syncGmail({ maxResults: 200 });
+      await syncGmail();
     } catch {
       navigate("/settings");
     }
@@ -135,7 +135,7 @@ export function Sidebar({
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-white/15 py-2 text-xs font-semibold backdrop-blur transition hover:bg-white/25 disabled:opacity-60"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", gmailSyncing && "animate-spin")} />
-            {gmailSyncing ? "Syncing…" : connected ? "Sync now" : "Set up inbox"}
+            {gmailSyncing ? "Syncing…" : connected ? "Sync now" : "Connect inbox"}
           </button>
         </div>
       </aside>

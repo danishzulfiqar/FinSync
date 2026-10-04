@@ -4,17 +4,15 @@ import { Layout } from "../components/layout/Layout";
 import { CreateAccountModal } from "../components/accounts/CreateAccountModal";
 import { AccountCardSkeleton, Skeleton } from "../components/ui/Skeleton";
 import { useAppData } from "../context/AppDataContext";
-import { accountBalance } from "../lib/analytics";
+import { accountBalance, totalBalance } from "../lib/analytics";
 import { formatCurrency } from "../lib/format";
 import { PROVIDERS } from "../types";
 
 export function Accounts() {
-  const { accounts, transactions, ready } = useAppData();
+  const { accounts, transactions, settings, ready } = useAppData();
   const [modalOpen, setModalOpen] = useState(false);
-  const total = accounts.reduce(
-    (s, a) => s + accountBalance(a, transactions),
-    0
-  );
+  const ignore = settings.excludeInternalTransfers;
+  const total = totalBalance(accounts, transactions, ignore);
   const initialLoading = !ready;
 
   return (
@@ -30,7 +28,10 @@ export function Accounts() {
             </p>
           )}
           <p className="mt-2 text-xs text-brand-100">
-            Across {accounts.length} account{accounts.length === 1 ? "" : "s"} · latest bank balance per account
+            Across {accounts.length} account{accounts.length === 1 ? "" : "s"} ·{" "}
+            {ignore
+              ? "ignoring transfers between your own accounts"
+              : "latest bank balance per account"}
           </p>
         </div>
         <button

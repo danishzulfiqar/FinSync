@@ -9,9 +9,11 @@ import { monthKey } from "./format";
  *  - balance = the bank-printed running balance of the latest row when known,
  *    otherwise opening balance + Σ signed flows
  *
- * On top of that, FinSync can optionally hide *internal transfers* (money
- * moving between the user's own accounts) from the flow totals — see
- * `detectInternalTransfers`. Balances always include every row.
+ * On top of that, FinSync can optionally ignore *internal transfers* (money
+ * moving between the user's own accounts) — see `detectInternalTransfers`.
+ * When on, they drop out of income/expense and the combined total balance is
+ * computed as if the money had never moved (`totalBalance`). Per-account
+ * balances are always the bank's own figure.
  */
 
 export function signedAmount(t: Transaction): number {
@@ -58,7 +60,13 @@ const NON_TRANSFER_CATEGORIES = new Set([
  * transfer. Two matching passes per amount bucket — first legs whose text
  * shares a distinctive word (the account holder's name shows on both sides
  * of a self-transfer), then legs that are both generic or self-named. A
- * payment to a third party is never paired. Returns the ids of both legs.
+ * payment to a third party is never paired.
+ *
+ * A final self-name pass flags any lone transfer leg whose only named party is
+ * the account holder ("RAAST P2P Danish Zulfiqar", "Received from Danish
+ * Zulfiqar") — money moving to or from the user's own accounts even when the
+ * opposite leg lives in an account FinSync doesn't track, so no pair exists to
+ * match. Returns the ids of every flagged leg.
  */
 export function detectInternalTransfers(
   transactions: Transaction[],
@@ -107,6 +115,30 @@ export function detectInternalTransfers(
       }
     }
   }
+
+  // Self-name pass: a transfer whose only named party is the account holder is
+  // money moving between their own accounts, even when the opposite leg lives
+  // in an account FinSync doesn't track (so there is no pair to match). Require
+  // every name token to be present so a relative who shares a surname, or the
+  // word "Danish" inside an unrelated merchant name, is never swept in.
+  if (self.size > 0) {
+    for (const t of transactions) {
+      if (matched.has(t.id) || !t.accountId || t.amount <= 0) continue;
+      if (NON_TRANSFER_CATEGORIES.has(t.categoryId)) continue;
+      const toks = new Set(
+        `${t.description} ${t.merchant}`.toLowerCase().split(/[^a-z]+/)
+      );
+      let all = true;
+      for (const name of self) {
+        if (!toks.has(name)) {
+          all = false;
+          break;
+        }
+      }
+      if (all) matched.add(t.id);
+    }
+  }
+
   return matched;
 }
 
@@ -204,7 +236,8 @@ export interface Kpis {
 export function computeKpis(
   flows: Transaction[],
   accounts: Account[],
-  all: Transaction[] = flows
+  all: Transaction[] = flows,
+  excludeTransfers = false
 ): Kpis {
   let income = 0;
   let spending = 0;
@@ -219,7 +252,7 @@ export function computeKpis(
     months.add(monthKey(t.date));
   }
   const net = income - spending;
-  const balance = accounts.reduce((s, a) => s + accountBalance(a, all), 0);
+  const balance = totalBalance(accounts, all, excludeTransfers);
   return {
     income,
     spending,
@@ -234,8 +267,13 @@ export function computeKpis(
 }
 
 /**
- * Current balance for a single account. Prefers the bank's own running balance
- * on the most recent row (authoritative); falls back to opening + flows.
+ * Current balance for a single account. Anchors on the bank's own running
+ * balance from the most recent row that carries one (e.g. a statement's closing
+ * balance), then applies the signed flows of every transaction dated strictly
+ * after that row (e.g. email-sync alerts that arrived since the statement). Any
+ * row at or before the anchor instant is already reflected in its balance, so
+ * it is never re-added. Falls back to opening + all flows when no row carries a
+ * running balance.
  */
 export function accountBalance(
   account: Account,
@@ -244,10 +282,39 @@ export function accountBalance(
   const mine = sortNewestFirst(
     transactions.filter((t) => t.accountId === account.id)
   );
-  const latest = mine.find((t) => t.balanceAfter != null);
-  if (latest) return latest.balanceAfter as number;
-  const flow = mine.reduce((s, t) => s + signedAmount(t), 0);
-  return account.openingBalance + flow;
+  const anchor = mine.find((t) => t.balanceAfter != null);
+  if (!anchor) {
+    const flow = mine.reduce((s, t) => s + signedAmount(t), 0);
+    return account.openingBalance + flow;
+  }
+  const flow = mine
+    .filter((t) => t.date > anchor.date)
+    .reduce((s, t) => s + signedAmount(t), 0);
+  return (anchor.balanceAfter as number) + flow;
+}
+
+/** Net signed amount of every flagged transfer leg. */
+export function transferFlow(transactions: Transaction[]): number {
+  let sum = 0;
+  for (const t of transactions) if (t.transfer) sum += signedAmount(t);
+  return sum;
+}
+
+/**
+ * Combined balance across accounts. With `excludeTransfers` the total is what
+ * it would be had money never moved between the user's own accounts: a pair
+ * of legs between two tracked accounts cancels out, while a lone leg whose
+ * other side is an account FinSync doesn't track shifts the total — money
+ * sent to yourself is still yours, money received from yourself was never
+ * income. Per-account figures are untouched; this only adjusts the sum.
+ */
+export function totalBalance(
+  accounts: Account[],
+  transactions: Transaction[],
+  excludeTransfers = false
+): number {
+  const bank = accounts.reduce((s, a) => s + accountBalance(a, transactions), 0);
+  return excludeTransfers ? bank - transferFlow(transactions) : bank;
 }
 
 export interface CategorySlice {
@@ -365,20 +432,21 @@ export interface BalancePoint {
 /**
  * Combined month-end balance per month, rebuilt backwards from today's
  * authoritative total so the series always terminates at the real balance
- * (FinLens `forecast_balance` history). Uses the full ledger — transfers
- * between own accounts net to zero here anyway.
+ * (FinLens `forecast_balance` history). With `excludeTransfers` both the
+ * endpoint and the monthly steps leave internal transfers out.
  */
 export function balanceSeries(
   transactions: Transaction[],
-  accounts: Account[]
+  accounts: Account[],
+  excludeTransfers = false
 ): BalancePoint[] {
   const nets = new Map<string, number>();
-  for (const t of transactions) {
+  for (const t of flowRows(transactions, excludeTransfers)) {
     const k = monthKey(t.date);
     nets.set(k, (nets.get(k) ?? 0) + signedAmount(t));
   }
   const months = [...nets.keys()].sort();
-  let running = accounts.reduce((s, a) => s + accountBalance(a, transactions), 0);
+  let running = totalBalance(accounts, transactions, excludeTransfers);
   const out: BalancePoint[] = [];
   for (let i = months.length - 1; i >= 0; i--) {
     out.unshift({ month: months[i], balance: running });
@@ -424,11 +492,12 @@ export function periodDeltas(
   flows: Transaction[],
   all: Transaction[],
   accounts: Account[],
+  excludeTransfers = false,
   now = new Date()
 ): PeriodDeltas | null {
   const currentKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
   const months = cashFlowByMonth(flows, []).filter((m) => m.month < currentKey);
-  const balances = balanceSeries(all, accounts);
+  const balances = balanceSeries(all, accounts, excludeTransfers);
   if (months.length < 2 || balances.length < 2) return null;
   const [prev, cur] = months.slice(-2);
   const [bPrev, bCur] = balances.slice(-2);
@@ -450,18 +519,36 @@ export interface AccountShare {
   transactions: number;
 }
 
+export interface AccountShares {
+  rows: AccountShare[];
+  /**
+   * Money that left tracked accounts for ones FinSync doesn't know about
+   * (net), when internal transfers are ignored. 0 otherwise.
+   */
+  elsewhere: number;
+  /** Share of the total held `elsewhere`, in percent. */
+  elsewhereShare: number;
+}
+
 /** Per-account balance and share of the total (a "dominance" bar). */
 export function accountShares(
   accounts: Account[],
-  transactions: Transaction[]
-): AccountShare[] {
+  transactions: Transaction[],
+  excludeTransfers = false
+): AccountShares {
   const rows = accounts.map((account) => ({
     account,
     balance: accountBalance(account, transactions),
     transactions: transactions.filter((t) => t.accountId === account.id).length,
     share: 0,
   }));
-  const total = rows.reduce((s, r) => s + Math.max(r.balance, 0), 0);
+  const elsewhere = excludeTransfers ? -transferFlow(transactions) : 0;
+  const total =
+    rows.reduce((s, r) => s + Math.max(r.balance, 0), 0) + Math.max(elsewhere, 0);
   for (const r of rows) r.share = total ? (Math.max(r.balance, 0) / total) * 100 : 0;
-  return rows.sort((a, b) => b.balance - a.balance);
+  return {
+    rows: rows.sort((a, b) => b.balance - a.balance),
+    elsewhere,
+    elsewhereShare: total ? (Math.max(elsewhere, 0) / total) * 100 : 0,
+  };
 }

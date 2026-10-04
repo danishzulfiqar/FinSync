@@ -12,6 +12,7 @@ import {
 import { Layout } from "../components/layout/Layout";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Switch } from "../components/ui/Switch";
+import { Select } from "../components/ui/Select";
 import { RangePills } from "../components/ui/RangePills";
 import { GmailSyncCard } from "../components/sync/GmailSyncCard";
 import { useAppData, type Settings as SettingsShape } from "../context/AppDataContext";
@@ -52,7 +53,7 @@ export function Settings() {
           <Card>
             <CardHeader
               title="Calculations"
-              subtitle="These change what counts as income and expense — never your balances"
+              subtitle="These change how your income, expense and total balance are worked out"
             />
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               <SettingRow
@@ -61,10 +62,10 @@ export function Settings() {
                 description={
                   accounts.length < 2
                     ? "Needs at least two accounts. Money you move between your own accounts will stop counting as income and expense."
-                    : `Pairs a debit on one account with an equal credit on another within a few days. ${
+                    : `Money you move between your own accounts stops counting as income and expense, and your total balance is worked out as if it never moved. ${
                         transferLegs.length
-                          ? `Found ${transferLegs.length / 2} transfer${transferLegs.length === 2 ? "" : "s"} worth ${formatCurrency(transferTotal)}.`
-                          : "No matching pairs found yet."
+                          ? `Found ${transferLegs.length} transfer${transferLegs.length === 1 ? "" : "s"} worth ${formatCurrency(transferTotal)}.`
+                          : "No transfers found yet."
                       }`
                 }
                 saved={savedKey === "transfers"}
@@ -79,19 +80,21 @@ export function Settings() {
                 {settings.excludeInternalTransfers && (
                   <label className="mt-3 flex items-center gap-3 text-xs text-slate-500">
                     Match window
-                    <select
+                    <Select
                       value={settings.transferWindowDays}
                       onChange={(e) =>
                         void save({ transferWindowDays: Number(e.target.value) }, "transfers")
                       }
-                      className="input w-auto py-1 text-xs"
+                      compact
+                      wrapperClassName="w-auto"
+                      aria-label="Transfer match window"
                     >
                       {[0, 1, 2, 3, 5, 7, 14].map((d) => (
                         <option key={d} value={d}>
                           {d === 0 ? "Same day" : `±${d} day${d === 1 ? "" : "s"}`}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                 )}
               </SettingRow>

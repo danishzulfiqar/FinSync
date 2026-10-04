@@ -2,6 +2,7 @@ import { PROVIDERS, type Transaction } from "../../types";
 import { useAppData } from "../../context/AppDataContext";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { Badge } from "../ui/Badge";
+import { Select } from "../ui/Select";
 import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Mail, FileText, PencilLine } from "lucide-react";
 
 const sourceIcon = {
@@ -59,10 +60,12 @@ export function TransactionsTable({
     className = "max-w-[170px]"
   ) =>
     editable ? (
-      <select
+      <Select
         value={t.categoryId}
         onChange={(e) => updateTransactionCategory(t.id, e.target.value)}
-        className={`input cursor-pointer py-1.5 text-xs ${className}`}
+        wrapperClassName={className}
+        compact
+        className="font-semibold"
         style={{ color }}
         aria-label="Category"
       >
@@ -75,7 +78,7 @@ export function TransactionsTable({
             {c.name}
           </option>
         ))}
-      </select>
+      </Select>
     ) : (
       <Badge color={color}>{name ?? "—"}</Badge>
     );
