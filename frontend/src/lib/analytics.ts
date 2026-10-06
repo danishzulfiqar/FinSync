@@ -267,13 +267,13 @@ export function computeKpis(
 }
 
 /**
- * Current balance for a single account. Anchors on the bank's own running
- * balance from the most recent row that carries one (e.g. a statement's closing
+ * Current balance for a single account. Statements are authoritative, so this
+ * anchors on the running balance of the most recent *statement* row (its closing
  * balance), then applies the signed flows of every transaction dated strictly
- * after that row (e.g. email-sync alerts that arrived since the statement). Any
- * row at or before the anchor instant is already reflected in its balance, so
- * it is never re-added. Falls back to opening + all flows when no row carries a
- * running balance.
+ * after that row (e.g. email/SMS alerts that arrived since the statement). Any
+ * row at or before the anchor instant is already reflected in its balance, so it
+ * is never re-added. When the account has no statement yet it falls back to any
+ * row carrying a running balance, then to opening + all flows.
  */
 export function accountBalance(
   account: Account,
@@ -282,7 +282,9 @@ export function accountBalance(
   const mine = sortNewestFirst(
     transactions.filter((t) => t.accountId === account.id)
   );
-  const anchor = mine.find((t) => t.balanceAfter != null);
+  const anchor =
+    mine.find((t) => t.source === "statement" && t.balanceAfter != null) ??
+    mine.find((t) => t.balanceAfter != null);
   if (!anchor) {
     const flow = mine.reduce((s, t) => s + signedAmount(t), 0);
     return account.openingBalance + flow;

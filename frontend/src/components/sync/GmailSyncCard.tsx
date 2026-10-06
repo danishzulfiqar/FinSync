@@ -41,9 +41,16 @@ export function GmailSyncCard({ compact = false }: { compact?: boolean }) {
     const outcome = params.get("gmail");
     if (!outcome) return;
     if (outcome === "connected") void refreshGmailStatus();
-    else if (outcome === "error")
-      setError("Gmail authorization was cancelled or failed. Please try again.");
+    else if (outcome === "error") {
+      const reason = params.get("reason");
+      setError(
+        reason
+          ? `Gmail authorization failed (${reason}). Please try again.`
+          : "Gmail authorization was cancelled or failed. Please try again."
+      );
+    }
     params.delete("gmail");
+    params.delete("reason");
     const qs = params.toString();
     window.history.replaceState(
       {},
