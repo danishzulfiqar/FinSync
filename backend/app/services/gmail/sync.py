@@ -22,6 +22,7 @@ from app.models.account import Account
 from app.models.enums import Provider, SourceType
 from app.models.gmail_sync_state import GmailSyncState
 from app.models.transaction import Transaction
+from app.models.transaction_source import TransactionSource
 from app.parsers import get_email_parser
 from app.services.gmail.client import build_query, fetch_email, list_message_ids
 from app.services.ingestion.pipeline import ingest_parsed_transaction
@@ -80,8 +81,17 @@ def sync_user_gmail(
         query = build_query(cfg.email_senders, after=after, before=before)
         ids = list_message_ids(service, query, max_results=max_results)
 
+        # Emails already ingested in a previous sync are keyed by their Gmail
+        # message id. Skipping them here means the 45-day re-scan window costs
+        # almost nothing (no re-download), which keeps us under Gmail's
+        # per-minute quota and only fetches genuinely new mail.
+        already = _already_ingested_ids(db, user_id)
+
         result = ProviderSyncResult(provider=key, query=query, after=after, matched=len(ids))
         for mid in ids:
+            if mid in already:
+                result.skipped += 1
+                continue
             email = fetch_email(service, mid)
             parsed = parser.parse(email)
             if parsed is None:
@@ -138,6 +148,23 @@ def sync_user_gmail(
         results.append(result)
 
     return results
+
+
+def _already_ingested_ids(db: Session, user_id: int) -> set[str]:
+    """Gmail message ids this user has already ingested (any provider).
+
+    Keyed on ``transaction_sources.source_id`` (the Gmail message id). Used to
+    skip re-fetching mail we've already processed so repeated syncs stay cheap.
+    """
+    rows = db.execute(
+        select(TransactionSource.source_id)
+        .join(Transaction, Transaction.id == TransactionSource.transaction_id)
+        .where(
+            Transaction.user_id == user_id,
+            TransactionSource.source_type == SourceType.EMAIL.value,
+        )
+    ).scalars().all()
+    return set(rows)
 
 
 def _latest_date(db: Session, user_id: int, provider_value: str) -> str | None:

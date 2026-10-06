@@ -11,7 +11,10 @@ Flow:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import logging
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -27,6 +30,8 @@ from app.services.gmail.oauth import (
     save_user_credentials,
 )
 
+logger = logging.getLogger(__name__)
+
 # Public router: the callback must be reachable without a bearer token. The
 # authorize endpoint still requires auth via its own dependency.
 router = APIRouter(tags=["gmail-oauth"])
@@ -36,7 +41,15 @@ router = APIRouter(tags=["gmail-oauth"])
 def gmail_authorize(current_user: User = Depends(get_current_user)) -> dict:
     """Return the Google consent URL for the current user to grant read-only access."""
     state = encode_oauth_state(current_user.id)
-    return {"url": build_authorization_url(state)}
+    try:
+        url = build_authorization_url(state)
+    except FileNotFoundError as exc:
+        # Gmail OAuth isn't configured on this server (no client id/secret/file).
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail=f"Gmail is not configured on the server: {exc}",
+        ) from exc
+    return {"url": url}
 
 
 @router.get("/sync/gmail/callback")
@@ -48,14 +61,25 @@ def gmail_callback(
 ) -> RedirectResponse:
     """Google's redirect target: exchange the code, store the token, return to the app."""
     frontend = get_settings().frontend_base_url
-    if error or not code or not state:
-        return RedirectResponse(url=f"{frontend}/settings?gmail=error")
+
+    def _fail(reason: str) -> RedirectResponse:
+        query = urlencode({"gmail": "error", "reason": reason})
+        return RedirectResponse(url=f"{frontend}/settings?{query}")
+
+    if error:
+        logger.warning("Gmail OAuth consent returned an error: %s", error)
+        return _fail(error)
+    if not code or not state:
+        logger.warning("Gmail OAuth callback missing code/state")
+        return _fail("missing_code")
 
     try:
         user_id = decode_oauth_state(state)
         creds = exchange_code(code)
         save_user_credentials(db, user_id, creds)
     except Exception:
-        return RedirectResponse(url=f"{frontend}/settings?gmail=error")
+        # Surface the real cause in the server logs; keep the redirect generic.
+        logger.exception("Gmail OAuth callback failed")
+        return _fail("exchange_failed")
 
     return RedirectResponse(url=f"{frontend}/settings?gmail=connected")

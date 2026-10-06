@@ -12,7 +12,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.user import User
-from app.services.maintenance import dedupe_statement_transactions
+from app.services.maintenance import (
+    dedupe_statement_transactions,
+    reconcile_email_statement_transactions,
+)
 
 router = APIRouter(tags=["maintenance"])
 
@@ -23,7 +26,11 @@ def run_dedupe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    """Collapse the current user's duplicate statement transactions."""
-    return dedupe_statement_transactions(
+    """Collapse duplicate statement rows and reconcile email/statement pairs."""
+    statement = dedupe_statement_transactions(
         db, user_id=current_user.id, dry_run=dry_run
     )
+    cross_source = reconcile_email_statement_transactions(
+        db, user_id=current_user.id, dry_run=dry_run
+    )
+    return {"statement": statement, "cross_source": cross_source}

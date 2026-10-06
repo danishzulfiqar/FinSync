@@ -14,15 +14,51 @@ needs to change when message layouts change.
 from __future__ import annotations
 
 import base64
+import logging
 import re
+import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from app.parsers.base import EmailMessage
 from app.services.gmail.oauth import load_credentials, load_user_credentials
+
+logger = logging.getLogger(__name__)
+
+# Statuses worth retrying: Gmail rate limiting (403 rateLimitExceeded / 429)
+# and transient server errors.
+_TRANSIENT_STATUSES = {429, 500, 502, 503}
+
+
+def _execute(request, *, max_retries: int = 6):
+    """Execute a Gmail API request, retrying on rate-limit/transient errors.
+
+    Gmail allows only ~250 quota units per user per minute, so a burst of
+    ``messages.get`` calls can hit ``403 rateLimitExceeded``. Back off
+    exponentially instead of failing the whole sync.
+    """
+    delay = 1.0
+    for attempt in range(max_retries + 1):
+        try:
+            return request.execute()
+        except HttpError as exc:
+            status = int(getattr(exc.resp, "status", 0) or 0)
+            content = exc.content or b""
+            is_rate_limited = status == 403 and (
+                b"rateLimitExceeded" in content or b"userRateLimitExceeded" in content
+            )
+            if attempt >= max_retries or not (is_rate_limited or status in _TRANSIENT_STATUSES):
+                raise
+            logger.warning(
+                "Gmail API %s, backing off %.1fs (attempt %d/%d)",
+                status, delay, attempt + 1, max_retries,
+            )
+            time.sleep(delay)
+            delay = min(delay * 2, 30.0)
 
 
 def build_service(db=None, user_id=None):
@@ -67,11 +103,10 @@ def list_message_ids(service, query: str, max_results: int | None = None) -> lis
     page_token: str | None = None
     while True:
         page_size = 500 if max_results is None else min(max_results, 500)
-        resp = (
+        resp = _execute(
             service.users()
             .messages()
             .list(userId="me", q=query, maxResults=page_size, pageToken=page_token)
-            .execute()
         )
         ids.extend(m["id"] for m in resp.get("messages", []))
         page_token = resp.get("nextPageToken")
@@ -82,11 +117,10 @@ def list_message_ids(service, query: str, max_results: int | None = None) -> lis
 
 def fetch_email(service, message_id: str) -> EmailMessage:
     """Fetch a single message and normalize it into an EmailMessage."""
-    msg = (
+    msg = _execute(
         service.users()
         .messages()
         .get(userId="me", id=message_id, format="full")
-        .execute()
     )
     headers = {
         h["name"].lower(): h["value"] for h in msg.get("payload", {}).get("headers", [])

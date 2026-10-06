@@ -15,8 +15,15 @@ No Gmail password is ever handled or stored. Only read-only scope is requested.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+# Google frequently returns a slightly different scope set than requested (e.g.
+# it adds ``openid``, or with incremental auth returns previously-granted
+# scopes). Without this, oauthlib aborts ``fetch_token`` with a "Scope has
+# changed" error and the OAuth callback fails. Must be set before oauthlib runs.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 import jwt
 from google.auth.transport.requests import Request

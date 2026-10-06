@@ -26,6 +26,7 @@ from app.parsers import get_email_parser
 from app.services.gmail.client import build_service
 from app.services.gmail.oauth import load_user_credentials
 from app.services.gmail.sync import sync_user_gmail
+from app.services.maintenance import reconcile_email_statement_transactions
 
 router = APIRouter(tags=["sync"])
 
@@ -114,6 +115,12 @@ def sync_gmail(
         max_results=max_results,
         dry_run=dry_run,
     )
+
+    # A new email alert may be the same event as a statement line already on
+    # record (different date/reference, so fingerprint dedup misses it). Merge
+    # those pairs so one transfer isn't counted twice.
+    if not dry_run:
+        reconcile_email_statement_transactions(db, user_id=current_user.id)
 
     totals = {
         "matched": sum(r.matched for r in results),
