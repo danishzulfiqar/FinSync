@@ -125,6 +125,7 @@ export function mapAccount(a: AccountOut): Account {
     openingBalance: Number(a.opening_balance) || 0,
     currency: a.currency || "PKR",
     color: a.color || PROVIDERS[provider].color,
+    isActive: a.is_active ?? true,
   };
 }
 

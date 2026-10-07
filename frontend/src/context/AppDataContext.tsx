@@ -107,6 +107,8 @@ interface AppDataContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   addAccount: (input: NewAccountInput) => Promise<Account>;
+  /** Toggle an account on/off; off accounts drop out of totals and flows. */
+  setAccountActive: (id: string, active: boolean) => Promise<void>;
   importTransactions: () => Promise<void>;
   updateTransactionCategory: (id: string, categoryId: string) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
@@ -163,10 +165,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return rawTransactions.map((t) => (ids.has(t.id) ? { ...t, transfer: true } : t));
   }, [rawTransactions, settings.transferWindowDays, user?.name]);
 
-  const flows = useMemo(
-    () => flowRows(transactions, settings.excludeInternalTransfers),
-    [transactions, settings.excludeInternalTransfers]
-  );
+  const flows = useMemo(() => {
+    const activeIds = new Set(
+      accounts.filter((a) => a.isActive).map((a) => a.id)
+    );
+    // Rows from switched-off accounts drop out of income/expense aggregates;
+    // unlinked rows (no account) always count.
+    const scoped = transactions.filter(
+      (t) => !t.accountId || activeIds.has(t.accountId)
+    );
+    return flowRows(scoped, settings.excludeInternalTransfers);
+  }, [transactions, accounts, settings.excludeInternalTransfers]);
 
   const categories = useMemo<Category[]>(
     () => buildCategories(transactions.map((t) => t.categoryId)),
@@ -237,10 +246,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const setAccountActive = useCallback(
+    async (id: string, active: boolean) => {
+      const before = accounts;
+      setAccounts((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, isActive: active } : a))
+      );
+      try {
+        await api.patch<AccountOut>(`/accounts/${id}`, { is_active: active });
+      } catch (err) {
+        setAccounts(before);
+        throw err;
+      }
+    },
+    [accounts]
+  );
+
   const importTransactions = useCallback(async () => {
     await refresh();
   }, [refresh]);
-
   const updateTransactionCategory = useCallback(
     async (id: string, categoryId: string) => {
       const name = categoryNameFor(categoryId, categories);
@@ -316,6 +340,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       addAccount,
+      setAccountActive,
       importTransactions,
       updateTransactionCategory,
       updateSettings,
@@ -337,6 +362,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       addAccount,
+      setAccountActive,
       importTransactions,
       updateTransactionCategory,
       updateSettings,

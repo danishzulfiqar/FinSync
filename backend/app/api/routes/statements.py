@@ -11,7 +11,10 @@ from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.schemas.statement import StatementFileResult, StatementImportResponse
-from app.services.maintenance import reconcile_email_statement_transactions
+from app.services.maintenance import (
+    dedupe_statement_transactions,
+    reconcile_email_statement_transactions,
+)
 from app.services.statements.importer import import_statement
 
 router = APIRouter(prefix="/statements", tags=["statements"])
@@ -75,8 +78,17 @@ def upload_statements(
         "needs_review": sum(r.needs_review for r in results),
         "errors": sum(1 for r in results if r.status == "error"),
     }
-    # A freshly imported statement line may be the same event as an email alert
-    # already on record; merge those cross-source pairs so nothing double-counts.
+    # Auto-audit every real import: collapse duplicate statement rows (re-uploads /
+    # overlapping PDFs), then merge any statement line that is the same event as an
+    # email alert already on record, so nothing double-counts.
+    audit = None
     if not dry_run:
-        reconcile_email_statement_transactions(db, user_id=current_user.id)
-    return StatementImportResponse(dry_run=dry_run, files=results, totals=totals)
+        audit = {
+            "statement": dedupe_statement_transactions(db, user_id=current_user.id),
+            "cross_source": reconcile_email_statement_transactions(
+                db, user_id=current_user.id
+            ),
+        }
+    return StatementImportResponse(
+        dry_run=dry_run, files=results, totals=totals, audit=audit
+    )

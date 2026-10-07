@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models.account import Account
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.schemas.account import AccountCreate, AccountOut
+from app.schemas.account import AccountCreate, AccountOut, AccountUpdate
 
 router = APIRouter(tags=["accounts"])
 
@@ -78,6 +78,28 @@ def create_account(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this provider and number already exists.",
         )
+    db.refresh(account)
+    return AccountOut.model_validate(account)
+
+
+@router.patch("/accounts/{account_id}", response_model=AccountOut)
+def update_account(
+    account_id: int,
+    payload: AccountUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AccountOut:
+    """Toggle an account on/off (or rename it). Off accounts drop out of totals."""
+    account = db.get(Account, account_id)
+    if account is None or account.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found."
+        )
+    if payload.is_active is not None:
+        account.is_active = payload.is_active
+    if payload.name is not None:
+        account.name = payload.name.strip()
+    db.commit()
     db.refresh(account)
     return AccountOut.model_validate(account)
 

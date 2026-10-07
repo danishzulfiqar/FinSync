@@ -14,6 +14,8 @@ export interface Account {
   openingBalance: number;
   currency: string; // "PKR"
   color: string; // tailwind-ish hex for accents
+  /** When false the account is hidden from combined totals and flow aggregates. */
+  isActive: boolean;
 }
 
 export interface Transaction {

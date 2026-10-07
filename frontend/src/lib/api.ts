@@ -170,6 +170,7 @@ export interface AccountOut {
   opening_balance: string | number;
   currency: string;
   color: string | null;
+  is_active: boolean;
   created_at: string;
 }
 

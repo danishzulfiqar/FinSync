@@ -28,4 +28,12 @@ class AccountOut(BaseModel):
     opening_balance: Decimal
     currency: str
     color: str
+    is_active: bool
     created_at: datetime
+
+
+class AccountUpdate(BaseModel):
+    """Editable account fields (currently just the on/off toggle and name)."""
+
+    is_active: bool | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=120)

@@ -9,10 +9,12 @@ import { formatCurrency } from "../lib/format";
 import { PROVIDERS } from "../types";
 
 export function Accounts() {
-  const { accounts, transactions, settings, ready } = useAppData();
+  const { accounts, transactions, settings, ready, setAccountActive } =
+    useAppData();
   const [modalOpen, setModalOpen] = useState(false);
   const ignore = settings.excludeInternalTransfers;
   const total = totalBalance(accounts, transactions, ignore);
+  const activeCount = accounts.filter((a) => a.isActive).length;
   const initialLoading = !ready;
 
   return (
@@ -28,7 +30,11 @@ export function Accounts() {
             </p>
           )}
           <p className="mt-2 text-xs text-brand-100">
-            Across {accounts.length} account{accounts.length === 1 ? "" : "s"} ·{" "}
+            Across {activeCount} active account{activeCount === 1 ? "" : "s"}
+            {activeCount !== accounts.length
+              ? ` (${accounts.length - activeCount} off)`
+              : ""}{" "}
+            ·{" "}
             {ignore
               ? "ignoring transfers between your own accounts"
               : "latest bank balance per account"}
@@ -56,7 +62,9 @@ export function Accounts() {
           return (
             <div
               key={a.id}
-              className="card overflow-hidden p-0 animate-fade-in"
+              className={`card overflow-hidden p-0 animate-fade-in transition ${
+                a.isActive ? "" : "opacity-60"
+              }`}
             >
               <div
                 className="relative h-28 p-5 text-white"
@@ -90,6 +98,29 @@ export function Accounts() {
                       {formatCurrency(balance)}
                     </p>
                   </div>
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-800">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    {a.isActive ? "Counted in totals" : "Hidden from totals"}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={a.isActive}
+                    aria-label={a.isActive ? "Turn account off" : "Turn account on"}
+                    onClick={() => {
+                      void setAccountActive(a.id, !a.isActive);
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                      a.isActive ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        a.isActive ? "translate-x-5" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
             </div>

@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Numeric,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import true as sa_true
 
 from app.database import Base
 
@@ -40,6 +42,8 @@ class Account(Base):
     opening_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     currency: Mapped[str] = mapped_column(String(3), default="PKR")
     color: Mapped[str] = mapped_column(String(16), default="#7c3aed")
+    # Off accounts stay in the ledger but drop out of combined totals & flows.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa_true())
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

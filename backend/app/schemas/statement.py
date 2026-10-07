@@ -55,3 +55,5 @@ class StatementImportResponse(BaseModel):
     dry_run: bool
     files: list[StatementFileResult]
     totals: dict[str, int]
+    # Post-import audit: {"statement": {...dedupe...}, "cross_source": {...reconcile...}}.
+    audit: dict[str, dict] | None = None

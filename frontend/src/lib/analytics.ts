@@ -315,7 +315,8 @@ export function totalBalance(
   transactions: Transaction[],
   excludeTransfers = false
 ): number {
-  const bank = accounts.reduce((s, a) => s + accountBalance(a, transactions), 0);
+  const active = accounts.filter((a) => a.isActive);
+  const bank = active.reduce((s, a) => s + accountBalance(a, transactions), 0);
   return excludeTransfers ? bank - transferFlow(transactions) : bank;
 }
 
