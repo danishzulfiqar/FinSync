@@ -232,6 +232,146 @@ def _looks_like_password_error(exc: Exception) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# HBL description cleanup                                                       #
+# --------------------------------------------------------------------------- #
+# HBL statement rows arrive as densely packed text with almost no spacing, e.g.
+# "FundsTransferSMc8349def373781TO JOHNSMITHIBANXXXX-3328Thru RaastMB..".
+# These helpers turn that into a readable summary plus a counterparty/merchant.
+
+_HBL_IBAN_RE = re.compile(r"IBAN[X]*-?(\d{3,4})")
+# The TO/FR direction marker is UPPERCASE and sits right before the counterparty
+# name (which ends at "IBAN"). Matched case-sensitively so it never fires inside
+# the lowercase transaction-hash noise that precedes it.
+_HBL_NAME_RE = re.compile(r"(TO|FR)\s*([A-Z][A-Za-z .'\-]*?)\s*IBAN")
+# POS rows end with "PKR <amount><glued digits><MERCHANT>"; the merchant is the
+# trailing text once the amount and its trailing reference digits are stripped.
+_HBL_POS_MERCHANT_RE = re.compile(r"PKR\s*[\d,]+\.\d{2}(.*)$")
+_HBL_LEADING_REF_RE = re.compile(r"^[\d\s+/*.\-]+")
+_HBL_TELCO_RE = re.compile(r"(UFONE|JAZZ|WARID|ZONG|TELENOR|SCOM)", re.IGNORECASE)
+# "LocalTransfer<ref digits><NAME> <counterparty account digits>-...": the
+# counterparty name is the text between the leading reference digits and the
+# next long digit run (the account number).
+_HBL_LOCAL_NAME_RE = re.compile(r"([A-Za-z][A-Za-z0-9 .,&()'/\-]*?)\s*\d{5,}")
+_CAMEL_SPLIT_RE = re.compile(r"(?<=[a-z])(?=[A-Z])")
+
+# HBL POS merchant text glues the city onto the preceding word
+# ("PHARMACYISLAMABAD") and omits spaces in some brand names. These lists let us
+# re-insert the missing spaces for the common Pakistani cities and known brands.
+_HBL_CITIES = (
+    "ISLAMABAD",
+    "RAWALPINDI",
+    "KARACHI",
+    "LAHORE",
+    "PESHAWAR",
+    "MULTAN",
+    "FAISALABAD",
+    "QUETTA",
+    "SIALKOT",
+    "GUJRANWALA",
+    "HYDERABAD",
+    "ABBOTTABAD",
+)
+_HBL_CITY_RE = re.compile(
+    r"(?<=[A-Za-z0-9.)])(" + "|".join(_HBL_CITIES) + r")\b", re.IGNORECASE
+)
+_HBL_BRAND_FIXUPS = {
+    "DWATSON": "D WATSON",
+    "THECOFFEE": "THE COFFEE",
+    "DAILYDELI": "DAILY DELI",
+}
+_HBL_BRAND_RE = re.compile(
+    r"\b(" + "|".join(_HBL_BRAND_FIXUPS) + r")\b", re.IGNORECASE
+)
+
+
+def _hbl_tidy_name(name: str) -> str:
+    name = _CAMEL_SPLIT_RE.sub(" ", name.strip(" -.'"))  # DanishZulfiqar -> Danish Zulfiqar
+    return re.sub(r"\s+", " ", name).strip()
+
+
+def _hbl_tidy_merchant(text: str) -> str:
+    """Re-space a glued HBL POS merchant string (city + known brands + ``&``)."""
+    text = _HBL_BRAND_RE.sub(lambda m: _HBL_BRAND_FIXUPS[m.group(1).upper()], text)
+    text = _HBL_CITY_RE.sub(r" \1", text)  # "PHARMACYISLAMABAD" -> "PHARMACY ISLAMABAD"
+    text = re.sub(r"\s*&\s*", " & ", text)  # "BEAN&TEA" -> "BEAN & TEA"
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _hbl_named_transfer(text: str, marker: str) -> str | None:
+    """Pull the counterparty name from a ``<marker><ref digits><NAME> <acct>`` row."""
+    rest = re.sub(rf"(?i)^.*?{re.escape(marker)}", "", text, count=1).lstrip()
+    rest = re.sub(r"^[\d\s]+", "", rest)  # drop the leading reference digits
+    name_m = _HBL_LOCAL_NAME_RE.match(rest)
+    if name_m:
+        name = _hbl_tidy_name(name_m.group(1))
+        if name and len(name) > 2:
+            return name
+    return None
+
+
+def clean_hbl_description(raw: str) -> tuple[str, str | None]:
+    """Turn a packed HBL statement description into ``(summary, counterparty)``.
+
+    Best-effort: recognises Raast/IBFT transfers, ATM withdrawals, card/POS
+    purchases and mobile top-ups; otherwise returns a lightly tidied string.
+    """
+    text = re.sub(r"\s+", " ", (raw or "")).strip()
+    if not text:
+        return (raw or "").strip(), None
+    lower = text.lower()
+
+    # Card / POS purchase or reversal: the trailing run is the merchant name.
+    # Reversals ("D.Card/POSRev") are refunds back to the account.
+    if "debitcard/pos" in lower or "d.card/pos" in lower or lower.startswith("pos"):
+        is_refund = "posrev" in lower or "pos rev" in lower
+        label = "Card refund" if is_refund else "Card purchase"
+        m = _HBL_POS_MERCHANT_RE.search(text)
+        merchant = _HBL_LEADING_REF_RE.sub("", m.group(1)).strip() if m else ""
+        merchant = _hbl_tidy_merchant(merchant) if merchant else ""
+        merchant = merchant or None
+        if merchant and len(merchant) <= 2:
+            merchant = None
+        return (f"{label} – {merchant}", merchant) if merchant else (label, None)
+
+    # ATM cash withdrawal.
+    if "atmcash" in lower or "cashpaid" in lower or "cashwithdraw" in lower:
+        return "ATM cash withdrawal", None
+
+    # Funds transfer (Raast / IBFT / 1-LINK / digital banking / mobile top-up).
+    if "fundstransfer" in lower:
+        telco = _HBL_TELCO_RE.search(text)
+        if telco:
+            op = telco.group(1).upper()
+            return f"Mobile top-up – {op}", op.title()
+
+        name_m = _HBL_NAME_RE.search(text)
+        if name_m:
+            direction = "to" if name_m.group(1) == "TO" else "from"
+            name = _hbl_tidy_name(name_m.group(2))
+            iban = _HBL_IBAN_RE.search(text)
+            last4 = iban.group(1)[-4:] if iban else None
+            if name:
+                summary = f"Transfer {direction} {name}"
+                if last4:
+                    summary += f" (••••{last4})"
+                return summary, name
+        return "Funds transfer", None
+
+    # Salary credit: "SalaryCredit<ref digits><EMPLOYER NAME> <acct digits>-...".
+    if "salarycredit" in lower:
+        name = _hbl_named_transfer(text, "salarycredit")
+        return (f"Salary – {name}", name) if name else ("Salary credit", None)
+
+    # Local / inter-bank transfer, e.g. salary or vendor credits:
+    # "LocalTransfer13580408476477HUAWEI TECH.PAKISTAN(PVT)LTD 08747900849201-...".
+    if "localtransfer" in lower:
+        name = _hbl_named_transfer(text, "localtransfer")
+        return (f"Local transfer – {name}", name) if name else ("Local transfer", None)
+
+    return text, None
+
+
+# --------------------------------------------------------------------------- #
 # NayaPay statement parser                                                     #
 # --------------------------------------------------------------------------- #
 # NayaPay lays each transaction out as a vertical band: the top line carries the

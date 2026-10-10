@@ -9,7 +9,12 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.models.enums import Provider, TransactionType
-from app.parsers.statement_pdf import Statement, _np_describe, _parse_nayapay
+from app.parsers.statement_pdf import (
+    Statement,
+    _np_describe,
+    _parse_nayapay,
+    clean_hbl_description,
+)
 from app.services.categorization.keyword_rules import categorize_by_keywords
 from app.services.statements.importer import (
     _mask_for,
@@ -64,6 +69,114 @@ def test_row_keys_are_unique_and_deterministic() -> None:
     keys2 = [k for _, k in statement_to_parsed(_sample_statement())]
     assert keys1 == keys2          # deterministic across re-parses (idempotent import)
     assert len(set(keys1)) == len(keys1)  # every row distinct
+
+
+def test_clean_hbl_description_extracts_summary_and_counterparty() -> None:
+    # Raast transfer out: counterparty name + masked IBAN last-4.
+    summary, who = clean_hbl_description(
+        "FundsTransferSMc8349def373781TO JOHNSMITHIBANXXXX-3328Thru RaastMBMB1011"
+    )
+    assert summary == "Transfer to JOHNSMITH (••••3328)"
+    assert who == "JOHNSMITH"
+
+    # Incoming transfer uses "from"; camel-cased names are split.
+    summary, who = clean_hbl_description(
+        "FundsTransfer... TO DanishZulfiqarIBANXXXX-2023Thru Raast"
+    )
+    assert summary == "Transfer to Danish Zulfiqar (••••2023)"
+    assert who == "Danish Zulfiqar"
+
+    # POS purchase: trailing text is the merchant, glued reference digits dropped.
+    summary, who = clean_hbl_description(
+        "DebitCard/POS447289093600PKR 1076.2509360006105391600CINNABON ISLAMABAD"
+    )
+    assert summary == "Card purchase – CINNABON ISLAMABAD"
+    assert who == "CINNABON ISLAMABAD"
+
+    # ATM withdrawal and mobile top-up.
+    assert clean_hbl_description("ATMCashPaid7098271313231002UNB9425") == (
+        "ATM cash withdrawal",
+        None,
+    )
+    assert clean_hbl_description(
+        "FundsTransfer6799...TOHBL40667 UFONE00503001234567thruDigitalBanking"
+    ) == ("Mobile top-up – UFONE", "Ufone")
+
+    # Local / inter-bank transfer: company name between the reference digits and
+    # the counterparty account number.
+    summary, who = clean_hbl_description(
+        "LocalTransfer13580408476477HUAWEI TECH.PAKISTAN(PVT)LTD "
+        "08747900849201-HBL1203118-ThruHBL Payments-BankReport"
+    )
+    assert summary == "Local transfer – HUAWEI TECH.PAKISTAN(PVT)LTD"
+    assert who == "HUAWEI TECH.PAKISTAN(PVT)LTD"
+
+    # Salary credit from an employer.
+    summary, who = clean_hbl_description(
+        "SalaryCredit67241400742192HUAWEI TECH.PAKISTAN(PVT)LTD "
+        "08747900849201-HBL20251119150126-Thru HBLPayments-20251119HBL.xlsx"
+    )
+    assert summary == "Salary – HUAWEI TECH.PAKISTAN(PVT)LTD"
+    assert who == "HUAWEI TECH.PAKISTAN(PVT)LTD"
+
+    # POS merchant text glues the city (and some brand names) onto the merchant.
+    summary, who = clean_hbl_description(
+        "DebitCard/POS447289093600PKR 700.0009360006105391600DWATSON PHARMACYISLAMABAD"
+    )
+    assert summary == "Card purchase – D WATSON PHARMACY ISLAMABAD"
+    assert who == "D WATSON PHARMACY ISLAMABAD"
+
+    # Card reversal is a refund back to the account.
+    summary, who = clean_hbl_description(
+        "D.Card/POSRev.425899141951 5391600+++++055009/11531310425899"
+        "PKR 1908.3014195109115391600MCDONALDS PAKISTANISLAMABAD"
+    )
+    assert summary == "Card refund – MCDONALDS PAKISTAN ISLAMABAD"
+    assert who == "MCDONALDS PAKISTAN ISLAMABAD"
+
+
+def test_parse_statement_cleans_hbl_descriptions() -> None:
+    parsed = statement_to_parsed(_cleanup_statement())
+    food, transfer = (p for p, _ in parsed)
+    assert transfer.description == "Transfer to JOHNSMITH (••••3328)"
+    assert transfer.merchant == "JOHNSMITH"
+    assert food.description == "Foodpanda order"  # non-HBL-pattern text left intact
+
+
+def _cleanup_statement() -> Statement:
+    return Statement(
+        metadata={
+            "layout": "hbl",
+            "order": "desc",
+            "date_fmt": "%d-%m-%Y",
+            "currency": "PKR",
+            "account_number": "1234567890",
+            "opening_balance": "0.00",
+            "closing_balance": "0.00",
+            "source_file": "hbl.pdf",
+        },
+        transactions=[
+            {
+                "date": "02-01-2025",
+                "description": (
+                    "FundsTransferSMc8349def373781TO JOHNSMITH"
+                    "IBANXXXX-3328Thru RaastMBMB1011"
+                ),
+                "debit": "1,000.00",
+                "credit": None,
+                "balance": "1,000.00",
+            },
+            {
+                "date": "01-01-2025",
+                "description": "Foodpanda order",
+                "debit": "2,000.00",
+                "credit": None,
+                "balance": "2,000.00",
+            },
+        ],
+    )
+
+
 
 
 def _ledger(rows: list[dict], source_file: str) -> Statement:

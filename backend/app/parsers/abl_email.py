@@ -38,8 +38,9 @@ _CARD_DESC_RE = re.compile(r"(?i)Transaction\s+description\s*:\s*(?P<desc>.+)")
 _CARD_REF_RE = re.compile(r"(?i)Instrument\s*/\s*Cheque#?\s*:\s*(?P<ref>[\w-]+)")
 
 # --- Fund transfer alert ------------------------------------------------------
+# Currency may carry a trailing period ("PKR.") in some ABL layouts.
 _XFER_RE = re.compile(
-    r"(?i)(?P<cur>[A-Z]{3})\s*(?P<amt>[\d,]+(?:\.\d+)?)\s+has\s+been\s+"
+    r"(?i)(?P<cur>[A-Z]{3})\.?\s*(?P<amt>[\d,]+(?:\.\d+)?)\s+has\s+been\s+"
     r"(?P<dir>received|credited|sent|debited|transferred|paid)\s+"
     r"(?:in|from|to)\s+your\s+Account\s+No:?\s*(?P<acct>[\w*]+)"
 )
@@ -47,11 +48,37 @@ _XFER_WHEN_RE = re.compile(
     r"(?i)\bon\s+\w+\s*,?\s*(?P<date>\d{1,2}-\w{3}-\d{4})\s+at\s+"
     r"(?P<time>\d{1,2}:\d{2}\s*[AP]M)"
 )
+# Alternate layout: "on 01/09/2026 at 01:28:49" (DD/MM/YYYY, 24-hour clock).
+_XFER_WHEN_SLASH_RE = re.compile(
+    r"(?i)\bon\s+(?P<date>\d{1,2}/\d{1,2}/\d{4})\s+at\s+"
+    r"(?P<time>\d{1,2}:\d{2}(?::\d{2})?)"
+)
 _XFER_DESC_RE = re.compile(r"(?i)Transaction\s+Description\s*:\s*(?P<desc>.+)")
-_XFER_PARTY_RE = re.compile(r"(?i)(?:Sender|Beneficiary|Receiver)\s+Name\s*:\s*(?P<name>.+)")
+# The counterparty name may sit on the same line as its label ("Sender Name:
+# ACME CORP") or on the next line ("Sender Name :\nSome Sender").
+# Allow a single optional newline, then reject captures that are actually the
+# next labelled field (e.g. an empty name followed by "Sender Account: ***0600").
+_XFER_PARTY_RE = re.compile(
+    r"(?i)(?:Sender|Beneficiary|Receiver)\s+Name\s*:[ \t]*\n?[ \t]*(?P<name>[^\n]+)"
+)
+_PARTY_REJECT_RE = re.compile(
+    r"(?i)^(?:sender|beneficiary|receiver|transaction)\b|\baccount\s*:|\breference\s*:"
+)
 _XFER_REF_RE = re.compile(r"(?i)Transaction\s+Reference\s*:\s*(?P<ref>[\w-]+)")
 
 _CREDIT_WORDS = {"received", "credited"}
+
+
+def _party_name(body: str) -> str | None:
+    """Extract the transfer counterparty name, tolerating label-on-next-line
+    layouts without mistaking a trailing "Sender Account:" line for a name."""
+    m = _XFER_PARTY_RE.search(body)
+    if not m:
+        return None
+    name = _first_line(m.group("name"))
+    if not name or _PARTY_REJECT_RE.search(name):
+        return None
+    return name
 
 
 def _mask(acct: str | None) -> str | None:
@@ -131,16 +158,15 @@ class AblEmailParser(BaseParser):
         if amount is None:
             return None
 
-        when = _XFER_WHEN_RE.search(body)
+        when = _XFER_WHEN_RE.search(body) or _XFER_WHEN_SLASH_RE.search(body)
         dt = (
             parse_local_datetime(when.group("date"), when.group("time"))
             if when
             else message.received_at
-        )
+        ) or message.received_at
         desc_m = _XFER_DESC_RE.search(body)
         desc = _first_line(desc_m.group("desc")) if desc_m else None
-        party_m = _XFER_PARTY_RE.search(body)
-        counterparty = _first_line(party_m.group("name")) if party_m else None
+        counterparty = _party_name(body)
         ref_m = _XFER_REF_RE.search(body)
         tx_type = (
             TransactionType.CREDIT

@@ -18,13 +18,16 @@ providers:
   hbl:
     display_name: "HBL"
     default_currency: "PKR"
-    # HBL bank-transfer notifications arrive by email.
+    # HBL outgoing-transaction notifications arrive by email.
     email_senders:
-      - "REPLACE_WITH_HBL_EMAIL_SENDER"        # e.g. "alerts@hbl.com"
+      - "digital.banking@hbl.com"
     email_subject_patterns:
-      - "REPLACE_WITH_HBL_SUBJECT_REGEX"        # e.g. "(?i)funds? transfer"
+      - "(?i)Transfer to Other Bank"       # funds transfer out
+      - "(?i)Mobile Bundle"                # mobile bundle / top-up
+      - "(?i)Send Money to Other Bank"     # Raast transfer out
+      - "(?i)Bill Payment"                 # utility bill payment
     email_body_patterns: []
-    # HBL card/purchase notifications arrive by SMS.
+    # HBL incoming funds + card/purchase notifications arrive by SMS.
     sms_senders:
       - "REPLACE_WITH_HBL_SMS_SENDER_ID"        # e.g. "HBL" or a short code
     sms_body_patterns:

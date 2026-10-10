@@ -26,7 +26,12 @@ from app.schemas.statement import (
 )
 from app.services.categorization.keyword_rules import categorize_by_keywords
 from app.services.ingestion.pipeline import ingest_parsed_transaction
-from app.parsers.statement_pdf import Statement, StatementError, parse_statement
+from app.parsers.statement_pdf import (
+    Statement,
+    StatementError,
+    clean_hbl_description,
+    parse_statement,
+)
 from app.utils.fingerprint import raw_message_hash, statement_fingerprint_extra
 
 _LAYOUT_PROVIDER = {"myabl": Provider.ABL, "hbl": Provider.HBL, "nayapay": Provider.NAYAPAY}
@@ -116,6 +121,10 @@ def statement_to_parsed(stmt: Statement) -> list[tuple[ParsedTransaction, str]]:
         amount = abs(signed)
 
         description = (row.get("description") or "").strip() or None
+        merchant = row.get("merchant")
+        if provider is Provider.HBL and description:
+            description, cleaned_merchant = clean_hbl_description(description)
+            merchant = merchant or cleaned_merchant
         row_key = raw_message_hash(
             account_number,
             source_file,
@@ -137,7 +146,7 @@ def statement_to_parsed(stmt: Statement) -> list[tuple[ParsedTransaction, str]]:
             currency=currency,
             account_identifier=row.get("account_identifier") or account_number,
             transaction_datetime=tx_datetime,
-            merchant=row.get("merchant"),
+            merchant=merchant,
             description=description,
             reference=row.get("reference"),
             balance_after=_to_decimal(row.get("balance")),

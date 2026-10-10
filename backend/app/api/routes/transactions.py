@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user
@@ -116,6 +116,18 @@ def update_transaction(
 
     if payload.category is not None:
         row.category = payload.category
+        # Propagate the chosen category to every other transaction with the
+        # same merchant so the user only has to categorize a merchant once.
+        if payload.apply_to_merchant and row.merchant and row.merchant.strip():
+            db.execute(
+                update(Transaction)
+                .where(
+                    Transaction.user_id == current_user.id,
+                    func.lower(func.trim(Transaction.merchant))
+                    == row.merchant.strip().lower(),
+                )
+                .values(category=payload.category)
+            )
     if payload.verified is not None:
         row.verified = payload.verified
 

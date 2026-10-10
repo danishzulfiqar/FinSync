@@ -268,14 +268,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const updateTransactionCategory = useCallback(
     async (id: string, categoryId: string) => {
       const name = categoryNameFor(categoryId, categories);
-      // Optimistic update.
+      // Learn-once: categorizing a merchant re-tags every transaction that
+      // shares it. Match on the normalized merchant of the edited row.
+      const target = rawTransactions.find((t) => t.id === id);
+      const merchantKey = target?.merchant?.trim().toLowerCase() || "";
+      const sameMerchant = (t: Transaction) =>
+        t.id === id ||
+        (!!merchantKey && t.merchant?.trim().toLowerCase() === merchantKey);
+      // Optimistic update across the whole merchant group.
       setRawTransactions((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, categoryId } : t))
+        prev.map((t) => (sameMerchant(t) ? { ...t, categoryId } : t))
       );
       try {
         const updated = await api.patch<TransactionOut>(
           `/transactions/${id}`,
-          { category: name }
+          { category: name, apply_to_merchant: true }
         );
         const mapped = mapTransaction(updated);
         setRawTransactions((prev) => prev.map((t) => (t.id === id ? mapped : t)));
@@ -284,7 +291,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         void refresh();
       }
     },
-    [categories, refresh]
+    [categories, rawTransactions, refresh]
   );
 
   const updateSettings = useCallback(

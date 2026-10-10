@@ -19,6 +19,10 @@ _FORMATS = (
     "%d %b %Y %I:%M %p",  # 02 Oct 2026 09:56 PM      (NayaPay)
     "%d-%b-%Y %I:%M%p",   # 29-Sep-2026 10:06PM       (ABL transfer)
     "%d-%b-%Y %I:%M %p",  # 29-Sep-2026 10:06 PM
+    "%d-%b-%Y %H:%M",     # 08-Oct-2026 09:02         (HBL Mobile)
+    "%d-%m-%Y %H:%M:%S",  # 25-07-2026 05:06:03       (HBL Digital)
+    "%d/%m/%Y %H:%M:%S",  # 01/09/2026 01:28:49       (ABL transfer v2)
+    "%d/%m/%Y %H:%M",     # 01/09/2026 01:28           (ABL transfer v2)
 )
 
 

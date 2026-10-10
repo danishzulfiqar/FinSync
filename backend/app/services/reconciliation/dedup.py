@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.enums import DedupStatus
@@ -51,7 +51,34 @@ def find_duplicate(
     if not probable_enabled or tx.transaction_datetime is None:
         return DedupResult(DedupStatus.UNIQUE)
 
-    # 2. Probable duplicate: same provider + type + amount within a time window.
+    # 2. Reference-based cross-channel match (e.g. an ABL email vs. the same
+    # transfer already imported from a statement). The two channels timestamp
+    # the event differently -- a statement posts it at day close while the email
+    # arrives at the actual transfer time -- so they fall outside the tight time
+    # window below. A shared bank reference plus identical provider/type/amount
+    # is a strong same-event signal, and the statement row usually carries the
+    # reference inside its description ("1LINK Inter-Bank FT 512375").
+    ref = (tx.reference or "").strip()
+    if len(ref) >= 5:
+        ref_q = select(Transaction).where(
+            Transaction.provider == tx.provider.value,
+            Transaction.transaction_type == tx.transaction_type.value,
+            Transaction.amount == tx.amount,
+            Transaction.transaction_datetime.is_not(None),
+            Transaction.transaction_datetime >= tx.transaction_datetime - timedelta(days=7),
+            Transaction.transaction_datetime <= tx.transaction_datetime + timedelta(days=7),
+            or_(
+                func.lower(Transaction.reference) == ref.lower(),
+                Transaction.description.ilike(f"%{ref}%"),
+            ),
+        )
+        if user_id is not None:
+            ref_q = ref_q.where(Transaction.user_id == user_id)
+        ref_match = db.execute(ref_q).scalars().first()
+        if ref_match is not None:
+            return DedupResult(DedupStatus.PROBABLE_DUPLICATE, ref_match)
+
+    # 3. Probable duplicate: same provider + type + amount within a time window.
     lo = tx.transaction_datetime - timedelta(seconds=time_window_seconds)
     hi = tx.transaction_datetime + timedelta(seconds=time_window_seconds)
     probable_q = select(Transaction).where(

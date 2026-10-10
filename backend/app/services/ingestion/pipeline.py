@@ -102,6 +102,7 @@ def ingest_parsed_transaction(
         # A corroborating second channel raises our confidence in the record.
         if dedup.status == DedupStatus.PROBABLE_DUPLICATE:
             dedup.existing.confidence = min(1.0, max(dedup.existing.confidence, tx.confidence) + 0.05)
+            _enrich_existing(dedup.existing, tx, providers)
         db.commit()
         status = "duplicate" if dedup.status == DedupStatus.EXACT_DUPLICATE else "linked"
         return IngestResult(status, dedup.existing.id, dedup.status.value)
@@ -172,3 +173,18 @@ def _attach_source(
             raw_hash=raw_hash,
         )
     )
+
+
+def _enrich_existing(existing: Transaction, tx: ParsedTransaction, providers) -> None:
+    """Backfill richer fields from a corroborating channel onto an existing row.
+
+    A statement import often lands a generic row (e.g. "1LINK Inter-Bank FT
+    512375" with no merchant). When the matching email arrives it carries the
+    counterparty name, so fill the blanks without ever overwriting values a
+    user may already have curated.
+    """
+    new_merchant = (tx.merchant or "").strip()
+    if new_merchant and not (existing.merchant or "").strip():
+        existing.merchant = new_merchant
+        if not (existing.category or "").strip():
+            existing.category = categorize(tx, providers)

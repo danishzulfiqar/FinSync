@@ -47,6 +47,9 @@ class TransactionUpdate(BaseModel):
 
     category: str | None = None
     verified: bool | None = None
+    # When true and a category is set, apply the same category to every other
+    # transaction that shares this one's merchant (learn-once categorization).
+    apply_to_merchant: bool = False
 
 
 class TransactionListResponse(BaseModel):
