@@ -16,6 +16,8 @@ import {
   type GmailSyncResponse,
   type PreferencesOut,
   type PreferencesPatch,
+  type SmsStatus,
+  type SmsSyncResponse,
   type TransactionListResponse,
   type TransactionOut,
 } from "../lib/api";
@@ -119,6 +121,12 @@ interface AppDataContextValue {
   syncGmail: (opts?: GmailSyncOptions) => Promise<GmailSyncResponse>;
   /** Start the Gmail web OAuth flow by redirecting to Google's consent screen. */
   connectGmail: () => Promise<void>;
+  /** SMS gateway state; null until fetched. */
+  sms: SmsStatus | null;
+  smsSyncing: boolean;
+  refreshSmsStatus: () => Promise<void>;
+  /** Ask the phone to replay SMS; matching transactions arrive shortly after. */
+  syncSms: () => Promise<SmsSyncResponse>;
 }
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -147,6 +155,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [gmail, setGmail] = useState<GmailStatus | null>(null);
   const [gmailSyncing, setGmailSyncing] = useState(false);
+  const [sms, setSms] = useState<SmsStatus | null>(null);
+  const [smsSyncing, setSmsSyncing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +200,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshSmsStatus = useCallback(async () => {
+    try {
+      setSms(await api.get<SmsStatus>("/sms/status"));
+    } catch {
+      setSms({ configured: false, latest_hbl_sms_at: null });
+    }
+  }, []);
+
   const connectGmail = useCallback(async () => {
     const { url } = await api.get<{ url: string }>("/sync/gmail/authorize");
     window.location.href = url;
@@ -215,9 +233,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       setReady(true);
     }
-    // Non-blocking: inbox status shouldn't delay the dashboard.
+    // Non-blocking: inbox/gateway status shouldn't delay the dashboard.
     void refreshGmailStatus();
-  }, [refreshGmailStatus]);
+    void refreshSmsStatus();
+  }, [refreshGmailStatus, refreshSmsStatus]);
 
   useEffect(() => {
     if (initializing) return;
@@ -226,6 +245,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setRawTransactions([]);
       setSettings(DEFAULT_SETTINGS);
       setGmail(null);
+      setSms(null);
       setError(null);
       setReady(false);
       return;
@@ -334,6 +354,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [refresh, refreshGmailStatus]
   );
 
+  const syncSms = useCallback(async (): Promise<SmsSyncResponse> => {
+    setSmsSyncing(true);
+    try {
+      const result = await api.post<SmsSyncResponse>("/sms/sync");
+      // The phone delivers asynchronously via webhook; re-pull the ledger a
+      // couple of times so new rows show up without a manual refresh.
+      window.setTimeout(() => void refresh(), 12_000);
+      window.setTimeout(() => void refresh(), 35_000);
+      return result;
+    } finally {
+      setSmsSyncing(false);
+    }
+  }, [refresh]);
+
   const value = useMemo<AppDataContextValue>(
     () => ({
       accounts,
@@ -356,6 +390,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshGmailStatus,
       syncGmail,
       connectGmail,
+      sms,
+      smsSyncing,
+      refreshSmsStatus,
+      syncSms,
     }),
     [
       accounts,
@@ -378,6 +416,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshGmailStatus,
       syncGmail,
       connectGmail,
+      sms,
+      smsSyncing,
+      refreshSmsStatus,
+      syncSms,
     ]
   );
 

@@ -15,6 +15,15 @@ import type { Account, Category, Transaction } from "../types";
 type Flow = "all" | "in" | "out" | "transfers";
 type Sort = "newest" | "oldest" | "largest" | "smallest";
 type RangeMode = TimeRange | "custom";
+type SourceFilter = "all" | Transaction["source"];
+
+const SOURCE_FILTER_LABELS: Record<SourceFilter, string> = {
+  all: "All sources",
+  statement: "Statement",
+  gmail: "Email",
+  sms: "SMS",
+  manual: "Manual",
+};
 
 const RANGE_FILTER_LABELS: Record<RangeMode, string> = {
   all: "All time",
@@ -86,6 +95,7 @@ export function Transactions() {
   const [query, setQuery] = useState(params.get("q") ?? "");
   const [accountId, setAccountId] = useState("all");
   const [categoryId, setCategoryId] = useState("all");
+  const [source, setSource] = useState<SourceFilter>("all");
   const [flow, setFlow] = useState<Flow>("all");
   const [range, setRange] = useState<RangeMode>("all");
   const [customFrom, setCustomFrom] = useState("");
@@ -98,6 +108,7 @@ export function Transactions() {
     query.trim() !== "" ||
     accountId !== "all" ||
     categoryId !== "all" ||
+    source !== "all" ||
     flow !== "all" ||
     range !== "all" ||
     sort !== "newest";
@@ -106,6 +117,7 @@ export function Transactions() {
     setQuery("");
     setAccountId("all");
     setCategoryId("all");
+    setSource("all");
     setFlow("all");
     setRange("all");
     setCustomFrom("");
@@ -143,6 +155,7 @@ export function Transactions() {
     return scoped.filter((t) => {
       if (accountId !== "all" && t.accountId !== accountId) return false;
       if (categoryId !== "all" && t.categoryId !== categoryId) return false;
+      if (source !== "all" && t.source !== source) return false;
       if (flow === "in" && t.type !== "credit") return false;
       if (flow === "out" && t.type !== "debit") return false;
       if (flow === "transfers" && !t.transfer) return false;
@@ -155,6 +168,7 @@ export function Transactions() {
     query,
     accountId,
     categoryId,
+    source,
     flow,
     range,
     customFrom,
@@ -260,6 +274,18 @@ export function Transactions() {
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={source}
+              onChange={(e) => setSource(e.target.value as SourceFilter)}
+              aria-label="Filter by source"
+              wrapperClassName="min-w-[8.5rem] flex-1 sm:flex-none"
+            >
+              {(Object.keys(SOURCE_FILTER_LABELS) as SourceFilter[]).map((s) => (
+                <option key={s} value={s}>
+                  {SOURCE_FILTER_LABELS[s]}
                 </option>
               ))}
             </Select>

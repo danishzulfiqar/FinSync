@@ -12,6 +12,7 @@ import {
 import { Layout } from "../components/layout/Layout";
 import { Card, CardHeader } from "../components/ui/Card";
 import { GmailSyncCard } from "../components/sync/GmailSyncCard";
+import { SmsSyncCard } from "../components/sync/SmsSyncCard";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../context/AppDataContext";
 import {
@@ -236,6 +237,7 @@ export function Upload() {
         </Card>
 
         <GmailSyncCard compact />
+        <SmsSyncCard compact />
       </div>
 
       {result && (
