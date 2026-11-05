@@ -7,9 +7,14 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 import {
+  ArrowDown,
   ArrowRight,
   ArrowLeftRight,
+  Cpu,
+  Database,
   FileText,
+  Fingerprint,
+  GitBranch,
   Inbox,
   Landmark,
   LineChart,
@@ -18,6 +23,7 @@ import {
   MessageSquare,
   RefreshCw,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   Wallet,
 } from "lucide-react";
@@ -71,48 +77,7 @@ function Reveal({
   );
 }
 
-/** Counts from 0 to `value` when scrolled into view. */
-function CountUp({
-  value,
-  prefix = "",
-  suffix = "",
-  duration = 1400,
-}: {
-  value: number;
-  prefix?: string;
-  suffix?: string;
-  duration?: number;
-}) {
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let raf = 0;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        io.disconnect();
-        const start = performance.now();
-        const tick = (now: number) => {
-          const p = Math.min((now - start) / duration, 1);
-          const eased = 1 - Math.pow(1 - p, 3);
-          el.textContent = `${prefix}${Math.round(value * eased).toLocaleString()}${suffix}`;
-          if (p < 1) raf = requestAnimationFrame(tick);
-        };
-        raf = requestAnimationFrame(tick);
-      },
-      { threshold: 0.6 }
-    );
-    io.observe(el);
-    return () => {
-      io.disconnect();
-      cancelAnimationFrame(raf);
-    };
-  }, [value, prefix, suffix, duration]);
-  return <span ref={ref}>{`${prefix}0${suffix}`}</span>;
-}
-
-/** Subtle Apple-style parallax: the hero preview settles as you scroll. */
+/** Subtle parallax: the hero diagram settles as you scroll. */
 function useParallax<T extends HTMLElement>(factor = 0.08, maxShift = 48) {
   const ref = useRef<T>(null);
   useEffect(() => {
@@ -151,64 +116,73 @@ const Logo = ({ className = "h-9 w-9" }: { className?: string }) => (
   </span>
 );
 
-const FEATURES = [
-  {
-    icon: LineChart,
-    title: "Balance predictions",
-    text: "A probabilistic forecast of where your balance is heading — the median path plus the realistic range of outcomes, learned from your own history.",
-  },
+const HIGHLIGHTS = [
   {
     icon: FileText,
-    title: "Statement import",
-    text: "Drop in bank PDF statements and get a clean, deduplicated ledger with running balances as the source of truth.",
-  },
-  {
-    icon: MessageSquare,
-    title: "SMS sync, on your terms",
-    text: "One tap asks your phone to replay bank SMS. Card purchases land in seconds — OTPs and promos never leave your inbox.",
+    title: "PDF statement parser",
+    text: "Bank statements arrive as dense, glued-together PDF text. A layout-aware parser extracts rows, cleans descriptions, recovers merchants, and keeps the bank's running balance as ground truth.",
   },
   {
     icon: Inbox,
-    title: "Gmail sync",
-    text: "Read-only inbox access pulls bank alert emails on demand — only messages newer than what's already on record.",
+    title: "Gmail ingestion",
+    text: "A read-only OAuth integration fetches bank alert emails on demand. Incremental checkpoints and rate-limit-aware retries mean each sync only touches what's new.",
+  },
+  {
+    icon: Smartphone,
+    title: "SMS gateway bridge",
+    text: "An Android gateway app replays bank SMS to the backend over an HMAC-authenticated webhook — on demand, never automatically. OTPs and promos are rejected at the door.",
+  },
+  {
+    icon: Fingerprint,
+    title: "Fingerprint deduplication",
+    text: "Every record gets a content fingerprint (provider, type, amount, time bucket). The same event seen twice — in any channel — can never create two rows.",
   },
   {
     icon: ArrowLeftRight,
-    title: "Smart reconciliation",
-    text: "The same purchase from a statement, an email and an SMS becomes one transaction — never three. Own-account transfers get untangled too.",
+    title: "Reconciliation engine",
+    text: "Statement lines, emails and SMS describing one purchase are matched by reference, amount and time, then merged — the statement row survives, enriched with the alert's merchant details.",
   },
   {
-    icon: Lock,
-    title: "Private by design",
-    text: "Self-hosted, single-tenant. No OTPs, PINs or card numbers are ever stored — only normalized transactions.",
+    icon: LineChart,
+    title: "Balance forecasting",
+    text: "Income and spending rhythms feed a probabilistic simulation that projects the median balance path with a P10–P90 confidence band.",
   },
 ];
 
-const STEPS = [
-  {
-    n: "01",
-    title: "Connect your sources",
-    text: "Upload a statement, connect Gmail read-only, and pair the SMS gateway app on your phone.",
-  },
-  {
-    n: "02",
-    title: "Sync when you want",
-    text: "Nothing runs behind your back. Press sync and watch alerts reconcile against your statements.",
-  },
-  {
-    n: "03",
-    title: "See everything clearly",
-    text: "Unified balances, spending by category, transfers untangled — and a forecast of where you're heading.",
-  },
-];
-
-const SOURCES = [
-  { icon: Landmark, label: "Allied Bank" },
-  { icon: Landmark, label: "HBL" },
-  { icon: Wallet, label: "NayaPay" },
-  { icon: Mail, label: "Gmail" },
-  { icon: MessageSquare, label: "SMS" },
+const PIPELINE = [
   { icon: FileText, label: "PDF statements" },
+  { icon: Mail, label: "Gmail alerts" },
+  { icon: MessageSquare, label: "Bank SMS" },
+];
+
+const STACK = [
+  { icon: Cpu, label: "FastAPI · Python" },
+  { icon: Database, label: "PostgreSQL · SQLAlchemy" },
+  { icon: GitBranch, label: "Alembic migrations" },
+  { icon: Sparkles, label: "React · TypeScript" },
+  { icon: Wallet, label: "Tailwind CSS · Vite" },
+  { icon: LineChart, label: "Recharts" },
+  { icon: Smartphone, label: "android-sms-gateway" },
+  { icon: Lock, label: "OAuth 2.0 · HMAC · JWT" },
+];
+
+const DECISIONS = [
+  {
+    title: "Sync is pull, not push",
+    text: "Nothing runs in the background. Email and SMS are fetched only when asked, so the owner always knows when data moves.",
+  },
+  {
+    title: "Statements are the source of truth",
+    text: "Real-time alerts are fast but incomplete; statements carry the authoritative running balance. Alerts enrich statement rows — never compete with them.",
+  },
+  {
+    title: "Idempotent by construction",
+    text: "Every import path converges on one ingestion pipeline with fingerprint checks, so re-running any sync is always safe.",
+  },
+  {
+    title: "Sensitive data never lands",
+    text: "OTPs, PINs and card numbers are filtered out before persistence. Only normalized transactions are stored.",
+  },
 ];
 
 /* ------------------------------ demo components ------------------------------ */
@@ -219,26 +193,24 @@ function ForecastDemo() {
     <div className="relative rounded-2xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-500">Projected balance · 6 months</p>
-          <p className="mt-1 text-2xl font-bold text-white">
-            <CountUp value={1420000} prefix="Rs " />
+          <p className="text-xs text-slate-500">
+            Projected balance · illustrative
           </p>
+          <p className="mt-1 text-2xl font-bold text-white">Median + band</p>
         </div>
         <span className="flex items-center gap-1.5 rounded-full border border-brand-400/25 bg-brand-400/10 px-2.5 py-1 text-[11px] font-semibold text-brand-300">
-          <Sparkles className="h-3 w-3" /> Median path
+          <Sparkles className="h-3 w-3" /> Simulation
         </span>
       </div>
       <svg viewBox="0 0 480 200" className="mt-4 w-full" aria-hidden>
         {[40, 80, 120, 160].map((y) => (
           <line key={y} x1="0" x2="480" y1={y} y2={y} stroke="#26262e" strokeWidth="1" />
         ))}
-        {/* P10–P90 band */}
         <path
           className="draw-fill"
           d="M0,150 C80,142 150,138 230,120 C320,100 400,92 480,60 L480,140 C400,160 320,166 230,172 C150,176 80,172 0,168 Z"
           fill="url(#band)"
         />
-        {/* Median line */}
         <path
           className="draw-path"
           pathLength="1"
@@ -295,7 +267,7 @@ function ReconcileDemo() {
       <Reveal delay={520} variant="reveal-scale">
         <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
           <ArrowLeftRight className="h-3.5 w-3.5 text-brand-400" />
-          merged into
+          fingerprinted & merged into
         </div>
         <div className="mt-2 flex items-center justify-between rounded-xl border border-brand-400/30 bg-brand-400/10 px-4 py-3 shadow-glow">
           <div>
@@ -326,7 +298,7 @@ function SyncDemo() {
   return (
     <div className="relative rounded-2xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-white">SMS sync</p>
+        <p className="text-sm font-semibold text-white">SMS replay</p>
         <span className="flex items-center gap-1.5 rounded-full border border-brand-400/25 bg-brand-400/10 px-2.5 py-1 text-[11px] font-semibold text-brand-300">
           <RefreshCw className="h-3 w-3" /> On demand
         </span>
@@ -354,10 +326,57 @@ function SyncDemo() {
   );
 }
 
+/** Animated ingestion pipeline: sources flow into the ledger. */
+function PipelineDiagram() {
+  return (
+    <div className="relative rounded-2xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur sm:p-8">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {PIPELINE.map((s, i) => (
+          <Reveal key={s.label} delay={i * 130} variant="reveal-scale">
+            <div className="flex items-center justify-center gap-2.5 rounded-xl border border-white/5 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
+              <s.icon className="h-4 w-4 text-brand-400" />
+              {s.label}
+            </div>
+          </Reveal>
+        ))}
+      </div>
+      <Reveal delay={400}>
+        <div className="my-4 flex justify-center">
+          <ArrowDown className="h-5 w-5 animate-float text-brand-400/60" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex items-center justify-center gap-2.5 rounded-xl border border-white/5 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
+            <Fingerprint className="h-4 w-4 text-brand-400" />
+            Parsers + fingerprint dedup
+          </div>
+          <div className="flex items-center justify-center gap-2.5 rounded-xl border border-white/5 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
+            <ArrowLeftRight className="h-4 w-4 text-brand-400" />
+            Cross-source reconciliation
+          </div>
+        </div>
+      </Reveal>
+      <Reveal delay={620}>
+        <div className="my-4 flex justify-center">
+          <ArrowDown className="h-5 w-5 animate-float text-brand-400/60" />
+        </div>
+        <div className="flex items-center justify-between rounded-xl border border-brand-400/30 bg-brand-400/10 px-5 py-4 shadow-glow">
+          <span className="flex items-center gap-3 text-sm font-semibold text-white">
+            <Database className="h-4 w-4 text-brand-400" />
+            One deduplicated ledger
+          </span>
+          <span className="text-xs text-slate-400">
+            balances · analytics · forecasts
+          </span>
+        </div>
+      </Reveal>
+    </div>
+  );
+}
+
 /* ---------------------------------- page ------------------------------------ */
 
 export function Landing() {
-  const previewRef = useParallax<HTMLDivElement>();
+  const heroRef = useParallax<HTMLDivElement>();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -380,200 +399,148 @@ export function Landing() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
           <div className="flex items-center gap-2.5">
             <Logo />
-            <span className="text-lg font-bold text-white">FinSync</span>
+            <div className="leading-tight">
+              <p className="text-base font-bold text-white">FinSync</p>
+              <p className="text-[11px] text-slate-500">
+                a personal finance engineering project
+              </p>
+            </div>
           </div>
           <nav className="hidden items-center gap-7 text-sm font-medium text-slate-400 md:flex">
-            <a href="#predictions" className="transition hover:text-white">
-              Predictions
+            <a href="#pipeline" className="transition hover:text-white">
+              Architecture
             </a>
-            <a href="#features" className="transition hover:text-white">
-              Features
+            <a href="#built" className="transition hover:text-white">
+              How it's built
             </a>
-            <a href="#how" className="transition hover:text-white">
-              How it works
+            <a href="#decisions" className="transition hover:text-white">
+              Design decisions
             </a>
-            <a href="#security" className="transition hover:text-white">
-              Security
+            <a href="#stack" className="transition hover:text-white">
+              Stack
             </a>
           </nav>
-          <div className="flex items-center gap-2">
-            <Link
-              to="/login"
-              className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white"
-            >
-              Sign in
-            </Link>
-            <Link to="/login" className="btn-primary px-4 py-2 text-sm">
-              Get started
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+          <Link to="/login" className="btn-primary px-4 py-2 text-sm">
+            Open the app
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </header>
 
       {/* Hero */}
       <section className="bg-grid relative overflow-hidden">
         <div className="pointer-events-none absolute left-1/2 top-0 h-[520px] w-[780px] -translate-x-1/2 rounded-full bg-brand-400/10 blur-3xl" />
-        <div className="relative mx-auto max-w-6xl px-5 pb-28 pt-24 text-center">
+        <div className="relative mx-auto max-w-6xl px-5 pb-24 pt-24 text-center">
           <div
             className="animate-fade-up mx-auto flex w-fit items-center gap-2 rounded-full border border-brand-400/25 bg-brand-400/10 px-3.5 py-1.5 text-xs font-semibold text-brand-300"
             style={{ animationDelay: "0ms" }}
           >
-            <Sparkles className="h-3.5 w-3.5" />
-            Statements · Email · SMS — one ledger
+            <GitBranch className="h-3.5 w-3.5" />
+            Self-hosted · open architecture · built in Pakistan
           </div>
           <h1
             className="animate-fade-up mx-auto mt-7 max-w-4xl text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-7xl"
             style={{ animationDelay: "90ms" }}
           >
-            Your money.
+            One ledger from
             <br />
             <span className="bg-gradient-to-r from-brand-300 via-brand-400 to-brand-500 bg-clip-text text-transparent">
-              Finally in focus.
+              three noisy banks.
             </span>
           </h1>
           <p
             className="animate-fade-up mx-auto mt-6 max-w-2xl text-base text-slate-400 sm:text-lg"
             style={{ animationDelay: "180ms" }}
           >
-            FinSync unifies Allied Bank, HBL and NayaPay — importing statements,
-            bank emails and SMS alerts into one deduplicated ledger, then
-            predicting where your balance goes next.
+            FinSync is a personal project that unifies Allied Bank, HBL and
+            NayaPay activity — parsing PDF statements, Gmail alerts and bank SMS
+            into a single deduplicated ledger with analytics and balance
+            forecasts. This page is the story of how it works.
           </p>
           <div
             className="animate-fade-up mt-9 flex flex-wrap items-center justify-center gap-3"
             style={{ animationDelay: "270ms" }}
           >
-            <Link to="/login" className="btn-primary px-6 py-3 text-base">
-              Open your dashboard
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-            <a
-              href="#predictions"
+            <a href="#pipeline" className="btn-primary px-6 py-3 text-base">
+              See the architecture
+              <ArrowDown className="h-4 w-4" />
+            </a>
+            <Link
+              to="/login"
               className="btn border border-white/10 bg-white/5 px-6 py-3 text-base text-slate-200 hover:bg-white/10"
             >
-              See predictions
-            </a>
+              Open the app
+            </Link>
           </div>
 
-          {/* Product preview with parallax settle */}
+          {/* The problem */}
           <div
-            className="animate-fade-up relative mx-auto mt-20 max-w-4xl"
+            ref={heroRef}
+            className="animate-fade-up relative mx-auto mt-20 max-w-3xl"
             style={{ animationDelay: "380ms" }}
           >
             <div className="pointer-events-none absolute inset-x-10 -bottom-6 h-24 rounded-full bg-brand-400/20 blur-3xl" />
-            <div
-              ref={previewRef}
-              className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/80 shadow-glow backdrop-blur"
-            >
-              <div className="flex items-center gap-1.5 border-b border-white/5 px-4 py-3">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-500/70" />
-                <span className="h-2.5 w-2.5 rounded-full bg-brand-400/70" />
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
-                <span className="ml-3 text-xs text-slate-500">
-                  finsync — dashboard · demo data
-                </span>
-              </div>
-              <div className="grid gap-4 p-6 sm:grid-cols-3">
-                {[
-                  { label: "Total balance", value: 1245000, accent: true },
-                  { label: "This month in", value: 185000, accent: false },
-                  { label: "This month out", value: 96500, accent: false },
-                ].map((kpi) => (
-                  <div
-                    key={kpi.label}
-                    className="rounded-xl border border-white/5 bg-slate-950/60 p-4 text-left"
-                  >
-                    <p className="text-xs text-slate-500">{kpi.label}</p>
-                    <p
-                      className={`mt-1 text-xl font-bold ${
-                        kpi.accent ? "text-brand-400" : "text-white"
-                      }`}
-                    >
-                      <CountUp value={kpi.value} prefix="Rs " duration={1800} />
-                    </p>
-                  </div>
-                ))}
-                <div className="sm:col-span-3">
-                  <div className="flex h-28 items-end gap-2 rounded-xl border border-white/5 bg-slate-950/60 p-4">
-                    {[34, 52, 41, 66, 48, 75, 58, 84, 64, 92, 70, 100].map(
-                      (h, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 origin-bottom rounded-t-sm bg-gradient-to-t from-brand-500/30 to-brand-400"
-                          style={{ height: `${h}%`, transitionDelay: `${i * 40}ms` }}
-                        />
-                      )
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sources marquee */}
-        <div className="relative border-t border-white/5 py-6">
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-slate-950 to-transparent" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-slate-950 to-transparent" />
-          <div className="overflow-hidden">
-            <div className="animate-marquee flex w-max items-center gap-14 pr-14">
-              {[...SOURCES, ...SOURCES].map((s, i) => (
-                <span
-                  key={`${s.label}-${i}`}
-                  className="flex items-center gap-2.5 text-sm font-medium text-slate-500"
-                >
-                  <s.icon className="h-4 w-4 text-brand-400/70" />
-                  {s.label}
-                </span>
-              ))}
+            <div className="relative rounded-2xl border border-white/10 bg-slate-900/80 p-6 text-left backdrop-blur sm:p-8">
+              <p className="text-xs font-bold uppercase tracking-widest text-brand-400">
+                The problem
+              </p>
+              <p className="mt-3 leading-relaxed text-slate-300">
+                One salary, three banks. Every purchase announces itself three
+                different ways — a statement line weeks later, an email alert,
+                an SMS within seconds — each with different wording, timing and
+                reference numbers. Add OTPs and promos to the noise, and "how
+                much money do I actually have?" becomes a surprisingly hard
+                engineering question.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Predictions showcase */}
-      <section id="predictions" className="border-t border-white/5 py-28">
+      {/* Architecture / pipeline */}
+      <section id="pipeline" className="border-t border-white/5 py-28">
         <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 md:grid-cols-2">
           <Reveal variant="reveal-left">
             <p className="text-xs font-bold uppercase tracking-widest text-brand-400">
-              Predictions
+              Architecture
             </p>
             <h2 className="mt-3 text-3xl font-bold leading-tight text-white sm:text-5xl">
-              Know next month
+              Every source,
               <br />
-              before it happens.
+              one pipeline.
             </h2>
             <p className="mt-5 leading-relaxed text-slate-400">
-              FinSync learns your income and spending rhythm, then simulates
-              thousands of possible futures. You see the most likely balance
-              path — and the realistic range around it — not a single guess.
+              Three very different inputs — PDF statements, Gmail alerts and
+              bank SMS replayed from an Android gateway — converge on a single
+              ingestion pipeline. Channel-specific parsers normalize each
+              format; everything downstream is shared, so deduplication and
+              reconciliation rules exist exactly once.
             </p>
             <ul className="mt-6 space-y-3 text-sm text-slate-300">
               {[
-                "Median forecast with P10–P90 confidence band",
-                "Spending pace and category budget burn-down",
-                "Updated instantly after every sync or import",
+                "FastAPI backend, PostgreSQL ledger, React dashboard",
+                "Per-provider regex parsers built from real message samples",
+                "One ingestion choke point: fingerprint → dedup → persist",
               ].map((t) => (
                 <li key={t} className="flex items-start gap-3">
-                  <LineChart className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
+                  <Cpu className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
                   {t}
                 </li>
               ))}
             </ul>
           </Reveal>
-          <Reveal variant="reveal-scale" delay={120} threshold={0.35}>
-            <ForecastDemo />
+          <Reveal variant="reveal-right" threshold={0.3}>
+            <PipelineDiagram />
           </Reveal>
         </div>
       </section>
 
-      {/* Reconciliation showcase */}
+      {/* Reconciliation story */}
       <section className="border-t border-white/5 py-28">
         <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 md:grid-cols-2">
           <Reveal variant="reveal-left" className="md:order-2">
             <p className="text-xs font-bold uppercase tracking-widest text-brand-400">
-              Reconciliation
+              The hard part
             </p>
             <h2 className="mt-3 text-3xl font-bold leading-tight text-white sm:text-5xl">
               Three alerts.
@@ -581,10 +548,12 @@ export function Landing() {
               One truth.
             </h2>
             <p className="mt-5 leading-relaxed text-slate-400">
-              Banks tell you about the same purchase three different ways.
-              FinSync fingerprints every record, matches statement lines to
-              their email and SMS twins, and keeps your balance exact — never
-              double-counted.
+              The same purchase arrives with different timestamps, different
+              references and different wording in every channel. The
+              reconciliation engine matches records by reference tokens, amount
+              and time windows, classifies transaction kinds so an ATM
+              withdrawal never pairs with a transfer, and merges matches into
+              the statement row — keeping the bank's running balance exact.
             </p>
           </Reveal>
           <Reveal variant="reveal-right" className="md:order-1" threshold={0.35}>
@@ -593,19 +562,92 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Features grid */}
-      <section id="features" className="border-t border-white/5 py-28">
+      {/* SMS story */}
+      <section className="border-t border-white/5 py-28">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 md:grid-cols-2">
+          <Reveal variant="reveal-left">
+            <p className="text-xs font-bold uppercase tracking-widest text-brand-400">
+              SMS ingestion
+            </p>
+            <h2 className="mt-3 text-3xl font-bold leading-tight text-white sm:text-5xl">
+              The phone is
+              <br />
+              part of the stack.
+            </h2>
+            <p className="mt-5 leading-relaxed text-slate-400">
+              Card purchases only announce themselves by SMS — so an Android
+              gateway app turns the phone into a data source. On request, it
+              replays bank messages to the backend over an HMAC-authenticated
+              webhook. Parsers built from real message templates keep
+              transactions and drop OTPs, promos and everything else unread.
+            </p>
+            <ul className="mt-6 space-y-3 text-sm text-slate-300">
+              {[
+                "Pull-based: a sync happens only when requested",
+                "Per-user signed webhook URLs — no shared secrets on the wire",
+                "Idempotent ingestion: replaying a window can't double count",
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-3">
+                  <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </Reveal>
+          <Reveal variant="reveal-right" threshold={0.35}>
+            <div className="relative">
+              <div className="pointer-events-none absolute -inset-6 rounded-3xl bg-brand-400/10 blur-3xl" />
+              <div className="animate-float">
+                <SyncDemo />
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* Forecasting story */}
+      <section className="border-t border-white/5 py-28">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 md:grid-cols-2">
+          <Reveal variant="reveal-left" className="md:order-2">
+            <p className="text-xs font-bold uppercase tracking-widest text-brand-400">
+              Forecasting
+            </p>
+            <h2 className="mt-3 text-3xl font-bold leading-tight text-white sm:text-5xl">
+              A range,
+              <br />
+              not a guess.
+            </h2>
+            <p className="mt-5 leading-relaxed text-slate-400">
+              With a clean ledger in place, the fun part: income and spending
+              rhythms feed a probabilistic simulation of the months ahead. The
+              dashboard shows the median balance path and the P10–P90 band —
+              an honest picture of uncertainty instead of a single line.
+            </p>
+          </Reveal>
+          <Reveal
+            variant="reveal-scale"
+            className="md:order-1"
+            delay={120}
+            threshold={0.35}
+          >
+            <ForecastDemo />
+          </Reveal>
+        </div>
+      </section>
+
+      {/* How it's built — component highlights */}
+      <section id="built" className="border-t border-white/5 py-28">
         <div className="mx-auto max-w-6xl px-5">
           <Reveal>
             <p className="text-center text-xs font-bold uppercase tracking-widest text-brand-400">
-              Features
+              How it's built
             </p>
             <h2 className="mx-auto mt-3 max-w-2xl text-center text-3xl font-bold text-white sm:text-4xl">
-              Built for how money actually moves
+              Six problems, six components
             </h2>
           </Reveal>
           <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((f, i) => (
+            {HIGHLIGHTS.map((f, i) => (
               <Reveal key={f.title} delay={(i % 3) * 110}>
                 <div className="group h-full rounded-2xl border border-white/5 bg-slate-900/60 p-6 transition duration-300 hover:-translate-y-1.5 hover:border-brand-400/30 hover:shadow-glow">
                   <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-brand-400/20 bg-brand-400/10 text-brand-400 transition duration-300 group-hover:scale-110 group-hover:bg-brand-400 group-hover:text-slate-950">
@@ -624,33 +666,32 @@ export function Landing() {
         </div>
       </section>
 
-      {/* How it works */}
-      <section id="how" className="border-t border-white/5 py-28">
+      {/* Design decisions */}
+      <section id="decisions" className="border-t border-white/5 py-28">
         <div className="mx-auto max-w-6xl px-5">
           <Reveal>
             <p className="text-center text-xs font-bold uppercase tracking-widest text-brand-400">
-              How it works
+              Design decisions
             </p>
             <h2 className="mt-3 text-center text-3xl font-bold text-white sm:text-4xl">
-              From inbox noise to clean ledger
+              Choices that shaped the project
             </h2>
           </Reveal>
-          <div className="mt-14 grid gap-5 md:grid-cols-3">
-            {STEPS.map((s, i) => (
-              <Reveal key={s.n} delay={i * 130} variant="reveal-scale">
-                <div className="relative h-full rounded-2xl border border-white/5 bg-slate-900/60 p-6 transition duration-300 hover:border-brand-400/25">
-                  <span className="text-4xl font-extrabold text-brand-400/25">
-                    {s.n}
-                  </span>
-                  <h3 className="mt-3 text-base font-semibold text-white">
-                    {s.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                    {s.text}
-                  </p>
-                  {i < STEPS.length - 1 && (
-                    <ArrowRight className="absolute -right-4 top-1/2 hidden h-5 w-5 -translate-y-1/2 text-brand-400/40 md:block" />
-                  )}
+          <div className="mt-14 grid gap-5 sm:grid-cols-2">
+            {DECISIONS.map((d, i) => (
+              <Reveal key={d.title} delay={(i % 2) * 120} variant="reveal-scale">
+                <div className="h-full rounded-2xl border border-white/5 bg-slate-900/60 p-6 transition duration-300 hover:border-brand-400/25">
+                  <div className="flex items-start gap-3">
+                    <ShieldCheck className="mt-1 h-5 w-5 shrink-0 text-brand-400" />
+                    <div>
+                      <h3 className="text-base font-semibold text-white">
+                        {d.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                        {d.text}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </Reveal>
             ))}
@@ -658,66 +699,55 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Security */}
-      <section id="security" className="border-t border-white/5 py-28">
-        <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 md:grid-cols-2">
-          <Reveal variant="reveal-left">
-            <p className="text-xs font-bold uppercase tracking-widest text-brand-400">
-              Security
+      {/* Stack */}
+      <section id="stack" className="border-t border-white/5 py-24">
+        <div className="mx-auto max-w-6xl px-5">
+          <Reveal>
+            <p className="text-center text-xs font-bold uppercase tracking-widest text-brand-400">
+              Stack
             </p>
-            <h2 className="mt-3 text-3xl font-bold text-white sm:text-5xl">
-              Your money data,
-              <br />
-              your rules.
+            <h2 className="mt-3 text-center text-3xl font-bold text-white sm:text-4xl">
+              Built with
             </h2>
-            <p className="mt-5 leading-relaxed text-slate-400">
-              FinSync is self-hosted and single-tenant: the database is yours.
-              Email access is read-only. SMS sync is pull-based — nothing moves
-              until you ask, and sensitive messages are discarded on sight.
-            </p>
-            <ul className="mt-6 space-y-3 text-sm text-slate-300">
-              {[
-                "No OTPs, PINs, CVVs or full card numbers — ever stored",
-                "HMAC-signed sync channel between phone and server",
-                "Read-only Gmail scope, revocable any time",
-                "Every import is idempotent — re-syncs can't double count",
-              ].map((t) => (
-                <li key={t} className="flex items-start gap-3">
-                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
-                  {t}
-                </li>
+          </Reveal>
+        </div>
+        <div className="relative mt-12 border-y border-white/5 py-6">
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-slate-950 to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-slate-950 to-transparent" />
+          <div className="overflow-hidden">
+            <div className="animate-marquee flex w-max items-center gap-14 pr-14">
+              {[...STACK, ...STACK].map((s, i) => (
+                <span
+                  key={`${s.label}-${i}`}
+                  className="flex items-center gap-2.5 text-sm font-medium text-slate-500"
+                >
+                  <s.icon className="h-4 w-4 text-brand-400/70" />
+                  {s.label}
+                </span>
               ))}
-            </ul>
-          </Reveal>
-          <Reveal variant="reveal-right" threshold={0.35}>
-            <div className="relative">
-              <div className="pointer-events-none absolute -inset-6 rounded-3xl bg-brand-400/10 blur-3xl" />
-              <div className="animate-float">
-                <SyncDemo />
-              </div>
             </div>
-          </Reveal>
+          </div>
         </div>
       </section>
 
-      {/* CTA */}
+      {/* Closing */}
       <section className="border-t border-white/5">
         <div className="bg-grid relative mx-auto max-w-6xl px-5 py-28 text-center">
           <div className="pointer-events-none absolute left-1/2 top-1/2 h-64 w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-400/10 blur-3xl" />
           <Reveal>
             <h2 className="relative text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
-              Know where your money is.{" "}
-              <span className="text-brand-400">Tonight.</span>
+              A project about making
+              <br />
+              <span className="text-brand-400">messy data honest.</span>
             </h2>
             <p className="relative mx-auto mt-5 max-w-md text-slate-400">
-              Import your first statement and watch months of transactions
-              organize themselves.
+              Statements, emails and SMS in — one trustworthy ledger out.
             </p>
             <Link
               to="/login"
               className="btn-primary relative mt-9 px-7 py-3 text-base"
             >
-              Get started free
+              Open the app
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Reveal>
@@ -731,7 +761,17 @@ export function Landing() {
             <Logo className="h-7 w-7" />
             <span className="font-semibold text-slate-300">FinSync</span>
           </div>
-          <p>© {new Date().getFullYear()} FinSync · Personal finance, unified.</p>
+          <p>
+            © {new Date().getFullYear()} · A personal project by{" "}
+            <a
+              href="https://github.com/danishzulfiqar"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-brand-400 hover:text-brand-300"
+            >
+              Danish Zulfiqar
+            </a>
+          </p>
           <Link
             to="/login"
             className="font-semibold text-brand-400 hover:text-brand-300"
