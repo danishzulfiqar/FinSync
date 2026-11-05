@@ -15,6 +15,7 @@ from app.api.routes import (
     health,
     maintenance,
     preferences,
+    sms,
     statements,
     sync,
     transactions,
@@ -55,6 +56,7 @@ app.include_router(gmail_oauth.router, prefix=prefix)
 # Protected: require a valid bearer token.
 protected = [Depends(get_current_user)]
 app.include_router(sync.router, prefix=prefix, dependencies=protected)
+app.include_router(sms.router, prefix=prefix, dependencies=protected)
 app.include_router(transactions.router, prefix=prefix, dependencies=protected)
 app.include_router(accounts.router, prefix=prefix)
 app.include_router(analytics.router, prefix=prefix, dependencies=protected)
