@@ -61,3 +61,82 @@
     background-size: 44px 44px;
   }
 }
+
+@layer utilities {
+  /* Apple-style scroll reveals: elements start soft-blurred and slide/settle in. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    filter: blur(8px);
+    transition:
+      opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+      filter 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity, transform, filter;
+  }
+  .reveal-left {
+    transform: translateX(-36px);
+  }
+  .reveal-right {
+    transform: translateX(36px);
+  }
+  .reveal-scale {
+    transform: scale(0.94) translateY(12px);
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      filter: none;
+      transition: none;
+    }
+  }
+
+  /* SVG line that draws itself when its section becomes visible. */
+  .draw-path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 1.8s cubic-bezier(0.4, 0, 0.2, 1) 0.25s;
+  }
+  .is-visible .draw-path {
+    stroke-dashoffset: 0;
+  }
+  .draw-fill {
+    opacity: 0;
+    transition: opacity 1.2s ease 1s;
+  }
+  .is-visible .draw-fill {
+    opacity: 1;
+  }
+
+  /* Endless logo/source marquee. */
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  .animate-marquee {
+    animation: marquee 26s linear infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgb(250 204 21 / 0.45);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgb(250 204 21 / 0);
+    }
+  }
+  .animate-pulse-dot {
+    animation: pulse-dot 2.2s ease-in-out infinite;
+  }
+}
