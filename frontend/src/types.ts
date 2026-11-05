@@ -30,7 +30,7 @@ export interface Transaction {
   type: TransactionType;
   categoryId: string;
   /** Where the record came from. */
-  source: "gmail" | "statement" | "manual";
+  source: "gmail" | "statement" | "sms" | "manual";
   /** Bank-printed running balance after this row (statements only). */
   balanceAfter?: number | null;
   /** One leg of a transfer between two of the user's own accounts. */

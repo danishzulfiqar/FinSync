@@ -15,6 +15,7 @@ import { Switch } from "../components/ui/Switch";
 import { Select } from "../components/ui/Select";
 import { RangePills } from "../components/ui/RangePills";
 import { GmailSyncCard } from "../components/sync/GmailSyncCard";
+import { SmsSyncCard } from "../components/sync/SmsSyncCard";
 import { useAppData, type Settings as SettingsShape } from "../context/AppDataContext";
 import { ApiError } from "../lib/api";
 import { formatCurrency } from "../lib/format";
@@ -158,6 +159,7 @@ export function Settings() {
 
         <div className="space-y-4">
           <GmailSyncCard />
+          <SmsSyncCard />
 
           <Link
             to="/profile"

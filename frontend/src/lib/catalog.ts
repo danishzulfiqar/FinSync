@@ -105,6 +105,7 @@ function normalizeProvider(raw: string): Provider {
 function mapSource(sourceType: string): Transaction["source"] {
   if (sourceType === "statement") return "statement";
   if (sourceType === "email") return "gmail";
+  if (sourceType === "sms") return "sms";
   return "manual";
 }
 

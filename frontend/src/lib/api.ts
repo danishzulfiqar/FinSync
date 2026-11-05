@@ -284,3 +284,18 @@ export interface GmailSyncResponse {
   totals: Record<string, number>;
   providers: GmailProviderSyncResult[];
 }
+
+// ---- SMS sync DTOs ----
+
+export interface SmsStatus {
+  configured: boolean;
+  latest_hbl_sms_at: string | null;
+}
+
+/** The sync is a request to the phone; matching SMS arrive via webhook shortly after. */
+export interface SmsSyncResponse {
+  status: string;
+  since: string;
+  until: string;
+  detail: string;
+}
