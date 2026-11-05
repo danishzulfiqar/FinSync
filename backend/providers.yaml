@@ -29,9 +29,9 @@ providers:
     email_body_patterns: []
     # HBL incoming funds + card/purchase notifications arrive by SMS.
     sms_senders:
-      - "REPLACE_WITH_HBL_SMS_SENDER_ID"        # e.g. "HBL" or a short code
-    sms_body_patterns:
-      - "REPLACE_WITH_HBL_SMS_REGEX"            # e.g. "(?i)spent|purchase|debited"
+      - "14250"
+    # Empty = every SMS from the sender reaches the parser, which rejects non-transactions.
+    sms_body_patterns: []
 
   abl:
     display_name: "Allied Bank"

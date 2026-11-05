@@ -43,6 +43,22 @@ class Settings(BaseSettings):
     sms_webhook_signing_key: str = "change-me"
     sms_webhook_max_skew_seconds: int = 300
     hbl_sms_senders: str = ""
+    # Dev only: append SMS mentioning HBL to this file (keep under gitignored secrets/).
+    sms_debug_capture_file: str = ""
+
+    # SMS gateway (android-sms-gateway Cloud mode, api.sms-gate.app)
+    # Sync is on demand: the backend asks the cloud API to replay the phone's
+    # inbox for a date range as batch webhooks to SMS_WEBHOOK_PUBLIC_URL.
+    sms_cloud_api_url: str = "https://api.sms-gate.app/3rdparty/v1"
+    sms_cloud_username: str = ""
+    sms_cloud_password: str = ""
+    # Optional; the first registered device is used when blank.
+    sms_cloud_device_id: str = ""
+    # Public HTTPS base URL of this backend (ngrok URL locally, Render in prod).
+    sms_webhook_public_url: str = ""
+    sms_cloud_timeout_seconds: float = 20.0
+    # Look-back window (days) when there is no prior HBL transaction.
+    sms_sync_default_lookback_days: int = 30
 
     # Gmail
     gmail_client_secret_file: str = "secrets/gmail_client_secret.json"
@@ -99,6 +115,14 @@ class Settings(BaseSettings):
     @property
     def hbl_sms_sender_list(self) -> list[str]:
         return [s.strip() for s in self.hbl_sms_senders.split(",") if s.strip()]
+
+    @property
+    def sms_cloud_configured(self) -> bool:
+        return bool(
+            self.sms_cloud_username.strip()
+            and self.sms_cloud_password
+            and self.sms_webhook_public_url.strip()
+        )
 
     def resolve_path(self, value: str) -> Path:
         """Resolve a config path relative to the backend directory if not absolute."""

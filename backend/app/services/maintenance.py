@@ -116,6 +116,13 @@ def _classify_kind(*texts: str | None) -> str:
     blob = " ".join(t for t in texts if t).lower()
     if "cash withdrawal" in blob or "atm" in blob:
         return "atm"
+    if "salary" in blob:
+        return "salary"
+    # Bank-initiated deductions: statement says "With-HoldingTax…", the SMS just "Account debit".
+    if "tax" in blob or "account debit" in blob:
+        return "charge"
+    if any(w in blob for w in ("top-up", "topup", "bill payment", "ufone", "jazz", "telenor", "zong")):
+        return "bill"
     if any(w in blob for w in ("purchase", "visa", "pos", "card", "mastercard")):
         return "pos"
     if any(w in blob for w in ("raast", "funds transfer", "fund transfer", "ibft", "transfer")):
@@ -192,8 +199,15 @@ def reconcile_email_statement_transactions(
     enriched = 0
 
     for txs in groups.values():
-        emails = [t for t in txs if _has_source(t, "email") and not _has_source(t, "statement")]
-        statements = [t for t in txs if _has_source(t, "statement") and not _has_source(t, "email")]
+        # Real-time alerts (email or SMS) fold into their statement twin.
+        emails = [
+            t for t in txs
+            if (_has_source(t, "email") or _has_source(t, "sms")) and not _has_source(t, "statement")
+        ]
+        statements = [
+            t for t in txs
+            if _has_source(t, "statement") and not _has_source(t, "email") and not _has_source(t, "sms")
+        ]
         if not emails or not statements:
             continue
 
