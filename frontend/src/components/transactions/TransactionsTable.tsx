@@ -3,11 +3,12 @@ import { useAppData } from "../../context/AppDataContext";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { Badge } from "../ui/Badge";
 import { Select } from "../ui/Select";
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Mail, FileText, PencilLine } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Mail, FileText, MessageSquare, PencilLine } from "lucide-react";
 
 const sourceIcon = {
   gmail: Mail,
   statement: FileText,
+  sms: MessageSquare,
   manual: PencilLine,
 } as const;
 
