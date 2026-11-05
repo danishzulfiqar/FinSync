@@ -59,9 +59,9 @@ export function Login() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Brand panel */}
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-brand-600 to-brand-900 p-12 text-white lg:flex lg:flex-col">
+      <div className="bg-grid relative hidden overflow-hidden bg-slate-950 p-12 text-white lg:flex lg:flex-col">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-400 text-slate-950">
             <svg viewBox="0 0 32 32" className="h-5 w-5 fill-current">
               <path d="M9 22V10h11v3h-7.5v2.5H19v3h-6.5V22H9Z" />
               <circle cx="23" cy="20.5" r="2.4" opacity="0.6" />
@@ -72,9 +72,10 @@ export function Login() {
 
         <div className="my-auto max-w-md">
           <h1 className="text-4xl font-bold leading-tight">
-            All your money, finally in one clear view.
+            All your money, finally in{" "}
+            <span className="text-brand-400">one clear view</span>.
           </h1>
-          <p className="mt-4 text-brand-100">
+          <p className="mt-4 text-slate-400">
             Track Allied Bank, HBL and NayaPay together — auto-imported from your
             inbox and statements, beautifully organized.
           </p>
@@ -85,7 +86,7 @@ export function Login() {
               { icon: ShieldCheck, text: "Read-only, private by design" },
             ].map((f) => (
               <li key={f.text} className="flex items-center gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-brand-400/20 bg-brand-400/10 text-brand-300">
                   <f.icon className="h-4 w-4" />
                 </span>
                 {f.text}
@@ -94,11 +95,11 @@ export function Login() {
           </ul>
         </div>
 
-        <p className="text-xs text-brand-200">
+        <p className="text-xs text-slate-500">
           © {new Date().getFullYear()} FinSync · Karachi, Pakistan
         </p>
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-24 right-10 h-56 w-56 rounded-full bg-brand-400/20 blur-2xl" />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-400/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 right-10 h-56 w-56 rounded-full bg-brand-400/15 blur-3xl" />
       </div>
 
       {/* Form panel */}
@@ -106,7 +107,7 @@ export function Login() {
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-2.5 lg:hidden">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-400 text-slate-950">
                 <svg viewBox="0 0 32 32" className="h-5 w-5 fill-current">
                   <path d="M9 22V10h11v3h-7.5v2.5H19v3h-6.5V22H9Z" />
                 </svg>

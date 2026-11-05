@@ -20,8 +20,9 @@ export function Accounts() {
   return (
     <Layout title="Accounts" subtitle="Bank & wallet balances">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="card flex-1 bg-gradient-to-br from-brand-600 to-brand-800 p-6 text-white">
-          <p className="text-sm text-brand-100">Total balance</p>
+        <div className="card relative flex-1 overflow-hidden border-slate-800 bg-slate-950 p-6 text-white">
+          <div className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full bg-brand-400/15 blur-3xl" />
+          <p className="text-sm text-slate-400">Total balance</p>
           {initialLoading ? (
             <Skeleton className="mt-2 h-9 w-40 bg-white/20 dark:bg-white/20" />
           ) : (
@@ -29,7 +30,7 @@ export function Accounts() {
               {formatCurrency(total)}
             </p>
           )}
-          <p className="mt-2 text-xs text-brand-100">
+          <p className="mt-2 text-xs text-slate-400">
             Across {activeCount} active account{activeCount === 1 ? "" : "s"}
             {activeCount !== accounts.length
               ? ` (${accounts.length - activeCount} off)`
@@ -112,7 +113,7 @@ export function Accounts() {
                       void setAccountActive(a.id, !a.isActive);
                     }}
                     className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                      a.isActive ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600"
+                      a.isActive ? "bg-brand-400" : "bg-slate-300 dark:bg-slate-600"
                     }`}
                   >
                     <span

@@ -174,8 +174,8 @@ export function Dashboard() {
         <>
           {/* Hero + KPIs */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-brand-900 p-5 text-white shadow-soft lg:col-span-4 dark:from-slate-900 dark:via-slate-900 dark:to-brand-950">
-              <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand-500/20 blur-3xl" />
+            <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-950 to-black p-5 text-white shadow-soft lg:col-span-4">
+              <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand-400/15 blur-3xl" />
               <div className="relative">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-slate-300">Total balance</p>
@@ -200,7 +200,7 @@ export function Dashboard() {
                     values={series.slice(-12).map((p) => p.balance)}
                     width={320}
                     height={56}
-                    stroke="#a78bfa"
+                    stroke="#facc15"
                     className="h-14 w-full"
                   />
                 </div>
