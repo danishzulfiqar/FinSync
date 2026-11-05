@@ -158,7 +158,7 @@ export function Topbar({
                 {user?.email ?? "Not signed in"}
               </p>
             </div>
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-300 to-brand-500 text-sm font-bold text-slate-950">
               {user ? initials(user.name) : "?"}
             </span>
             <ChevronDown className="hidden h-4 w-4 text-slate-400 sm:block" />
@@ -209,7 +209,7 @@ export function Topbar({
             aria-label={gmailSyncing ? "Syncing your inbox" : "Syncing your data"}
             className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-brand-100 dark:bg-brand-500/20"
           >
-            <div className="h-full w-1/4 animate-progress rounded-full bg-brand-600" />
+            <div className="h-full w-1/4 animate-progress rounded-full bg-brand-400" />
           </div>
         )}
       </div>

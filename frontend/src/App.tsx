@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Dashboard } from "./pages/Dashboard";
+import { Landing } from "./pages/Landing";
 import { Transactions } from "./pages/Transactions";
 import { Accounts } from "./pages/Accounts";
 import { Categories } from "./pages/Categories";
@@ -31,9 +32,13 @@ export default function App() {
       <Route
         path="/"
         element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
+          isAuthenticated ? (
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          ) : (
+            <Landing />
+          )
         }
       />
       <Route

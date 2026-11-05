@@ -126,7 +126,7 @@ export function Settings() {
                         onClick={() => void save({ forecastHorizon: h }, "horizon")}
                         className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
                           settings.forecastHorizon === h
-                            ? "bg-brand-600 text-white"
+                            ? "bg-brand-400 text-slate-950"
                             : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                         }`}
                       >

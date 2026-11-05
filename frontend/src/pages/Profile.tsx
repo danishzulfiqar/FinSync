@@ -14,7 +14,7 @@ export function Profile() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <div className="flex flex-col items-center py-4 text-center">
-            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-2xl font-bold text-white">
+            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-brand-300 to-brand-500 text-2xl font-bold text-slate-950">
               {user ? initials(user.name) : "?"}
             </span>
             <p className="mt-4 text-lg font-bold text-slate-900 dark:text-white">
