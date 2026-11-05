@@ -221,7 +221,7 @@ function ForecastDemo() {
         <div>
           <p className="text-xs text-slate-500">Projected balance · 6 months</p>
           <p className="mt-1 text-2xl font-bold text-white">
-            <CountUp value={2412000} prefix="Rs " />
+            <CountUp value={1420000} prefix="Rs " />
           </p>
         </div>
         <span className="flex items-center gap-1.5 rounded-full border border-brand-400/25 bg-brand-400/10 px-2.5 py-1 text-[11px] font-semibold text-brand-300">
@@ -271,9 +271,9 @@ function ForecastDemo() {
 /** Three noisy sources collapse into one clean transaction. */
 function ReconcileDemo() {
   const rows = [
-    { icon: FileText, label: "Statement", text: "D.Card/POS CINNABON ISB · Rs 1,016.75" },
-    { icon: Mail, label: "Email", text: "Transaction alert · Rs 1,016.75" },
-    { icon: MessageSquare, label: "SMS", text: "Debit Card charged Rs 1,016.75" },
+    { icon: FileText, label: "Statement", text: "D.Card/POS COFFEE HOUSE LHE · Rs 1,250.00" },
+    { icon: Mail, label: "Email", text: "Transaction alert · Rs 1,250.00" },
+    { icon: MessageSquare, label: "SMS", text: "Debit Card charged Rs 1,250.00" },
   ];
   return (
     <div className="relative rounded-2xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur">
@@ -300,10 +300,10 @@ function ReconcileDemo() {
         <div className="mt-2 flex items-center justify-between rounded-xl border border-brand-400/30 bg-brand-400/10 px-4 py-3 shadow-glow">
           <div>
             <p className="text-sm font-semibold text-white">
-              Card purchase — CINNABON ISLAMABAD
+              Card purchase — COFFEE HOUSE
             </p>
             <p className="text-xs text-slate-400">
-              Rs 1,016.75 · 3 sources · balance verified
+              Rs 1,250.00 · 3 sources · balance verified
             </p>
           </div>
           <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-400">
@@ -318,10 +318,10 @@ function ReconcileDemo() {
 /** On-demand sync: imported vs discarded. */
 function SyncDemo() {
   const rows = [
-    { icon: Wallet, text: "Card purchase — Rs 1,016.75", tag: "imported" },
-    { icon: Landmark, text: "Salary credit — Rs 143,849", tag: "imported" },
-    { icon: Lock, text: "OTP 983079 …", tag: "discarded" },
-    { icon: Mail, text: "40% off this Eid! …", tag: "discarded" },
+    { icon: Wallet, text: "Card purchase — Rs 1,250.00", tag: "imported" },
+    { icon: Landmark, text: "Funds received — Rs 25,000", tag: "imported" },
+    { icon: Lock, text: "OTP 123456 …", tag: "discarded" },
+    { icon: Mail, text: "40% off this weekend! …", tag: "discarded" },
   ];
   return (
     <div className="relative rounded-2xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur">
@@ -471,14 +471,14 @@ export function Landing() {
                 <span className="h-2.5 w-2.5 rounded-full bg-brand-400/70" />
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
                 <span className="ml-3 text-xs text-slate-500">
-                  finsync — dashboard
+                  finsync — dashboard · demo data
                 </span>
               </div>
               <div className="grid gap-4 p-6 sm:grid-cols-3">
                 {[
-                  { label: "Total balance", value: 2230222, accent: true },
-                  { label: "This month in", value: 196429, accent: false },
-                  { label: "This month out", value: 48118, accent: false },
+                  { label: "Total balance", value: 1245000, accent: true },
+                  { label: "This month in", value: 185000, accent: false },
+                  { label: "This month out", value: 96500, accent: false },
                 ].map((kpi) => (
                   <div
                     key={kpi.label}
@@ -590,25 +590,6 @@ export function Landing() {
           <Reveal variant="reveal-right" className="md:order-1" threshold={0.35}>
             <ReconcileDemo />
           </Reveal>
-        </div>
-      </section>
-
-      {/* Stats band */}
-      <section className="border-t border-white/5 py-20">
-        <div className="mx-auto grid max-w-5xl gap-10 px-5 text-center sm:grid-cols-4">
-          {[
-            { v: 3, suffix: "", label: "banks, one ledger" },
-            { v: 2400, suffix: "+", label: "transactions unified" },
-            { v: 500, suffix: "+", label: "duplicates merged" },
-            { v: 0, suffix: "", label: "OTPs or PINs stored" },
-          ].map((s, i) => (
-            <Reveal key={s.label} delay={i * 100}>
-              <p className="text-4xl font-extrabold text-brand-400 sm:text-5xl">
-                <CountUp value={s.v} suffix={s.suffix} />
-              </p>
-              <p className="mt-2 text-sm text-slate-400">{s.label}</p>
-            </Reveal>
-          ))}
         </div>
       </section>
 
