@@ -237,7 +237,7 @@ export function Transactions() {
                   onClick={() => setFlow(f)}
                   className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition sm:flex-none ${
                     flow === f
-                      ? "bg-brand-600 text-white"
+                      ? "bg-brand-400 text-slate-950"
                       : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                   }`}
                 >

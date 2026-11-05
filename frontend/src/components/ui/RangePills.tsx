@@ -32,7 +32,7 @@ export function RangePills({
           className={cn(
             "rounded-lg px-2.5 py-1 text-xs font-semibold transition sm:px-3",
             value === r
-              ? "bg-brand-600 text-white shadow-sm"
+              ? "bg-brand-400 text-slate-950 shadow-sm"
               : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
           )}
         >

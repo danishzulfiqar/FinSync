@@ -26,8 +26,8 @@ interface Row {
 
 export function ForecastChart({ data }: { data: Forecast }) {
   const { theme } = useTheme();
-  const grid = theme === "dark" ? "#1e293b" : "#eef2f7";
-  const axis = theme === "dark" ? "#64748b" : "#94a3b8";
+  const grid = theme === "dark" ? "#26262e" : "#eeeef1";
+  const axis = theme === "dark" ? "#70707b" : "#9d9da7";
 
   const last = data.history[data.history.length - 1];
   const rows: Row[] = [
@@ -59,8 +59,8 @@ export function ForecastChart({ data }: { data: Forecast }) {
         <ComposedChart data={rows} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
           <defs>
             <linearGradient id="gBand" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.08} />
+              <stop offset="0%" stopColor="#facc15" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="#facc15" stopOpacity={0.08} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
@@ -120,7 +120,7 @@ export function ForecastChart({ data }: { data: Forecast }) {
           <Line
             type="monotone"
             dataKey="p50"
-            stroke="#8b5cf6"
+            stroke="#eab308"
             strokeWidth={2.5}
             strokeDasharray="6 4"
             dot={false}

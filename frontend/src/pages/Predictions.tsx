@@ -110,7 +110,7 @@ export function Predictions() {
                   className={cn(
                     "rounded-lg px-2.5 py-1 text-xs font-semibold transition",
                     horizon === h
-                      ? "bg-brand-600 text-white"
+                      ? "bg-brand-400 text-slate-950"
                       : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                   )}
                 >
@@ -313,7 +313,7 @@ function Legend({ swatch, label, dashed }: { swatch: string; label: string; dash
     <span className="flex items-center gap-1.5">
       <span
         className={cn("h-1 w-5 rounded-full", swatch)}
-        style={dashed ? { backgroundImage: "repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px)", backgroundColor: "transparent", color: "#8b5cf6" } : undefined}
+        style={dashed ? { backgroundImage: "repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px)", backgroundColor: "transparent", color: "#eab308" } : undefined}
       />
       {label}
     </span>

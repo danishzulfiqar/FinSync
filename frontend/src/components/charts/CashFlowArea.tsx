@@ -13,8 +13,8 @@ import { useTheme } from "../../context/ThemeContext";
 
 export function CashFlowArea({ data }: { data: MonthPoint[] }) {
   const { theme } = useTheme();
-  const grid = theme === "dark" ? "#1e293b" : "#eef2f7";
-  const axis = theme === "dark" ? "#64748b" : "#94a3b8";
+  const grid = theme === "dark" ? "#26262e" : "#eeeef1";
+  const axis = theme === "dark" ? "#70707b" : "#9d9da7";
 
   return (
     <div className="h-72">

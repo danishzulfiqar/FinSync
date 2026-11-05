@@ -69,7 +69,7 @@ export function Sidebar({
       >
         <div className="flex h-16 items-center justify-between px-5">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-soft">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-400 text-slate-950 shadow-soft">
               <svg viewBox="0 0 32 32" className="h-5 w-5 fill-current">
                 <path d="M9 22V10h11v3h-7.5v2.5H19v3h-6.5V22H9Z" />
                 <circle cx="23" cy="20.5" r="2.4" opacity="0.6" />
@@ -113,16 +113,16 @@ export function Sidebar({
           ))}
         </nav>
 
-        <div className="m-3 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-4 text-white">
+        <div className="m-3 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold">Gmail sync</p>
             {connected && (
-              <span className="flex items-center gap-1 text-[11px] text-brand-100">
+              <span className="flex items-center gap-1 text-[11px] text-brand-300">
                 <CheckCircle2 className="h-3 w-3" /> Connected
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-brand-100">
+          <p className="mt-1 text-xs text-slate-400">
             {connected
               ? lastSync
                 ? `Last synced ${formatDateTime(lastSync)}`
