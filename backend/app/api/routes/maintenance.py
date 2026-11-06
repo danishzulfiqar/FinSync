@@ -13,6 +13,7 @@ from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.services.maintenance import (
+    dedupe_statement_balance_duplicates,
     dedupe_statement_transactions,
     reconcile_email_statement_transactions,
 )
@@ -30,7 +31,14 @@ def run_dedupe(
     statement = dedupe_statement_transactions(
         db, user_id=current_user.id, dry_run=dry_run
     )
+    balance = dedupe_statement_balance_duplicates(
+        db, user_id=current_user.id, dry_run=dry_run
+    )
     cross_source = reconcile_email_statement_transactions(
         db, user_id=current_user.id, dry_run=dry_run
     )
-    return {"statement": statement, "cross_source": cross_source}
+    return {
+        "statement": statement,
+        "balance": balance,
+        "cross_source": cross_source,
+    }

@@ -1,14 +1,38 @@
-# FinSync — Personal Finance Transaction Ingestion
+# FinSync — One ledger from three noisy banks
 
-Unified, private, self-hosted ingestion of your own bank/wallet transactions
-from **Allied Bank (email)**, **HBL (transfer email + card SMS)**, and
-**NayaPay (email)** into a single normalized PostgreSQL database — with
-deduplication, categorization, analytics, and CSV export.
+A personal-finance engineering project that unifies your own transactions from
+**Allied Bank**, **HBL**, and **NayaPay** — scattered across email alerts, card
+SMS, and PDF statements — into a single, deduplicated, categorized ledger with a
+dashboard, analytics, and forecasting.
 
-> **Authorized access only.** FinSync uses the official Gmail API (read-only
-> OAuth) for your own inbox and the open-source Android SMS Gateway to forward
-> your own incoming SMS. It never scrapes banking apps, never reverse-engineers
-> private APIs, and never asks for passwords, OTPs, PINs, CVVs, or card numbers.
+> **Authorized, read-only access to your own data.** FinSync uses the official
+> Gmail API (read-only OAuth) on your own inbox and the open-source
+> [Android SMS Gateway](https://github.com/capcom6/android-sms-gateway) to
+> forward your own incoming SMS. It never scrapes banking apps, never
+> reverse-engineers private APIs, and never asks for passwords, OTPs, PINs,
+> CVVs, or card numbers.
+
+This is a solo project built to solve a real problem: no single bank app shows
+the whole picture when money moves across three institutions and arrives through
+three different channels. FinSync is the engine that reconciles them.
+
+---
+
+## Highlights
+
+- **Multi-channel ingestion** — Gmail API (ABL / HBL / NayaPay emails), HBL card
+  & transfer SMS via a cloud SMS gateway, and PDF statement import.
+- **One transaction, many sources** — email + SMS + statement evidence attach to
+  the same financial record via `transaction_sources` instead of duplicating it.
+- **Deterministic deduplication** — a SHA-256 `fingerprint` collapses the same
+  event seen on different channels; ingestion is fully idempotent.
+- **Cross-source reconciliation** — real-time email/SMS alerts are merged into
+  the authoritative monthly statement row by reference and time.
+- **Analytics & forecasting** — income/expense flows, category breakdowns,
+  internal-transfer detection, and a cash-flow projection — all computed from the
+  normalized ledger.
+- **Full-stack & deployed** — FastAPI backend on Render, PostgreSQL on Neon,
+  React dashboard on Vercel.
 
 ---
 
@@ -16,35 +40,49 @@ deduplication, categorization, analytics, and CSV export.
 
 ```
    ABL email ─┐
-HBL transfer  │
-     email ───┤        ┌─ Gmail API (OAuth read-only) ─┐
-              ├─────────┤                               ├──► Ingestion Pipeline
-HBL card SMS ─┤        └─ Android SMS Gateway webhook ──┘        │
-              │                                                  ▼
-NayaPay email┘                                    Normalization → Fingerprint
-                                                          → Deduplication
-                                                                 │
-                                                                 ▼
-                                                          PostgreSQL
-                                                     ┌──────┼──────┐
-                                                 Dashboard  CSV  Analytics
+HBL transfer  │        ┌─ Gmail API (OAuth read-only) ─┐
+     email ───┤        │                               │
+              ├────────┤                               ├──► Ingestion pipeline
+HBL card SMS ─┤        └─ Android SMS Gateway (cloud) ──┘            │
+              │                                                      │
+NayaPay email │        ┌─ PDF statement upload ────────────────────►│
+              │                                                      ▼
+   Statements ┘                          Normalize → Fingerprint → Deduplicate
+                                                   → Reconcile → Categorize
+                                                             │
+                                                             ▼
+                                                        PostgreSQL
+                                             ┌───────────────┼───────────────┐
+                                        Dashboard        Analytics        CSV export
 ```
 
-Data flow per channel:
+| Provider | Transfers | Card / purchases | Statements |
+|----------|-----------|------------------|------------|
+| ABL      | Email (Gmail API) | Email (Gmail API) | PDF import |
+| HBL      | Email (Gmail API) + SMS | SMS (gateway) | PDF import |
+| NayaPay  | Email (Gmail API) | Email (Gmail API) | PDF import |
 
-| Provider | Transfers | Card/Purchases |
-|----------|-----------|----------------|
-| ABL      | Email → Gmail API | — |
-| HBL      | Email → Gmail API | SMS → Android SMS Gateway → webhook |
-| NayaPay  | Email → Gmail API | — |
-
-Everything funnels into one **Transaction** table. Multiple sources (email +
-SMS + future statement + future official API) attach to the same transaction via
-`transaction_sources` without duplicating the financial record.
+Everything funnels into one **`transactions`** table. Multiple sources attach to
+the same row through `transaction_sources`, so the financial record is never
+duplicated when the same event arrives on a second channel.
 
 ---
 
-## Project structure
+## Tech stack
+
+**Backend** — Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2.x, Alembic,
+PostgreSQL, bcrypt + JWT auth, Google API client (Gmail read-only), httpx,
+`pdfplumber` for statement parsing, pytest.
+
+**Frontend** — React 18, TypeScript, Vite, Tailwind CSS, Recharts,
+React Router, lucide-react.
+
+**Infra** — Docker / docker-compose for local Postgres + API, Render (backend),
+Neon (managed Postgres), Vercel (frontend).
+
+---
+
+## Repository structure
 
 ```
 FinSync/
@@ -52,276 +90,170 @@ FinSync/
 │   ├── app/
 │   │   ├── main.py              # FastAPI app + router wiring
 │   │   ├── config.py            # env settings + providers.yaml loader
-│   │   ├── database.py          # SQLAlchemy engine/session/Base
-│   │   ├── models/              # Transaction, TransactionSource, GmailSyncState, enums
-│   │   ├── schemas/             # Pydantic: ParsedTransaction, API I/O, webhook envelope
-│   │   ├── api/routes/          # health, webhooks, sync, transactions, accounts,
-│   │   │                        #   providers, analytics, export
+│   │   ├── database.py          # SQLAlchemy engine / session / Base
+│   │   ├── core/security.py     # bcrypt hashing + JWT access tokens
+│   │   ├── models/              # Transaction, TransactionSource, Account, User, …
+│   │   ├── schemas/             # Pydantic: ParsedTransaction, API I/O, webhook
+│   │   ├── api/routes/          # auth, transactions, accounts, analytics, export,
+│   │   │                        #   sync, sms, webhooks, statements, preferences,
+│   │   │                        #   maintenance, gmail_oauth, health
 │   │   ├── services/
-│   │   │   ├── gmail/           # OAuth (read-only) + Gmail client
-│   │   │   ├── sms/             # HMAC signature verify + provider identifier
-│   │   │   ├── ingestion/       # parse → fingerprint → dedup → persist pipeline
-│   │   │   ├── reconciliation/  # duplicate detection / states
+│   │   │   ├── gmail/           # read-only OAuth + Gmail client + sync
+│   │   │   ├── sms/             # cloud gateway, HMAC signature, provider id
+│   │   │   ├── ingestion/       # parse → fingerprint → dedup → persist
+│   │   │   ├── reconciliation/  # cross-source duplicate detection
+│   │   │   ├── statements/      # PDF statement importer
 │   │   │   └── categorization/  # deterministic, config-driven rules
-│   │   ├── parsers/             # hbl_email, hbl_sms, abl_email, nayapay_email (+ base)
-│   │   └── utils/               # fingerprint, amount parsing
-│   ├── alembic/                 # migrations (0001_initial)
-│   ├── tests/                   # health, signature, fingerprint, HBL SMS, email stubs
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   ├── providers.yaml           # sender/pattern config + category rules (edit this)
-│   └── .env.example
-├── frontend/                    # React + Vite (Phase 5 placeholder)
+│   │   ├── parsers/             # abl_email, hbl_email, hbl_sms, nayapay_email,
+│   │   │                        #   statement_pdf (+ base)
+│   │   └── utils/               # fingerprint, amount & date parsing
+│   ├── alembic/versions/        # migrations 0001–0006
+│   ├── tests/                   # 69 tests (parsers, dedup, reconciliation, auth…)
+│   ├── scripts/                 # ops: dedupe, reclean, replicate, enrich, smoke
+│   ├── providers.yaml           # sender/pattern config + category rules
+│   ├── Dockerfile · .env.example
+│   └── requirements.txt
+├── frontend/                    # React + Vite dashboard (Landing, Dashboard,
+│   └── src/                     #   Transactions, Accounts, Predictions, Settings…)
 ├── android/documentation/       # SMS Gateway setup guide
-├── scripts/                     # gmail_authorize.py, send_test_sms.py
-├── docker-compose.yml           # PostgreSQL + backend
-├── .gitignore
+├── notebooks/                   # Gmail exploration notebook (outputs cleared)
+├── docker-compose.yml · render.yaml · vercel.json
 └── README.md
 ```
 
 ---
 
-## Quick start (Mac)
+## Quick start (local)
 
-### Option A — Docker (recommended)
+### 1. Backend + database
 
 ```bash
-# 1. Configure environment
+# From the repo root — start Postgres + the API (runs migrations automatically)
 cp backend/.env.example backend/.env
-# edit backend/.env: set SMS_WEBHOOK_SIGNING_KEY (and Gmail paths if using email)
-
-# 2. Bring up PostgreSQL + backend (runs migrations automatically)
 docker compose up -d --build
 
-# 3. Verify
-curl http://localhost:8000/health
-#   → {"status":"ok"}
-curl http://localhost:8000/health/db
-#   → {"status":"ok","database":"reachable"}
+curl http://localhost:8000/health        # → {"status":"ok"}
+curl http://localhost:8000/health/db     # → {"status":"ok","database":"reachable"}
 ```
 
 Interactive API docs: http://localhost:8000/docs
 
-### Option B — Local Python + Dockerized DB
+Prefer running the API outside Docker?
 
 ```bash
-# Start just the database
-docker compose up -d db
-
+docker compose up -d db            # just the database
 cd backend
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-cp .env.example .env    # ensure DATABASE_URL points at localhost:5432
-
+cp .env.example .env               # DATABASE_URL → localhost:5432
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Run tests
+### 2. Frontend
 
 ```bash
-cd backend
-pytest -q      # health, HMAC signature, fingerprint dedup, HBL SMS parser, email stubs
+cd frontend
+npm install
+echo "VITE_API_URL=http://localhost:8000/api/v1" > .env   # see .env.example
+npm run dev                        # http://localhost:5173
 ```
 
-The parser/signature/fingerprint tests need **no database**.
+### 3. Tests
+
+```bash
+cd backend && source .venv/bin/activate
+pytest -q                          # 69 passing; parser/dedup tests need no DB
+```
 
 ---
 
 ## Environment variables
 
-See `backend/.env.example` for the full annotated list. Key ones:
+See `backend/.env.example` and `frontend/.env.example` for the full annotated
+lists. Key backend settings:
 
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | PostgreSQL connection (compose overrides host to `db`) |
-| `SMS_WEBHOOK_SIGNING_KEY` | HMAC key from the Android app (Settings → Webhooks → Signing Key) |
-| `SMS_WEBHOOK_MAX_SKEW_SECONDS` | Reject webhook timestamps older/newer than this (default 300) |
-| `HBL_SMS_SENDERS` | Optional comma-separated sender allowlist override for HBL SMS |
-| `GMAIL_CLIENT_SECRET_FILE` | OAuth client secret (Desktop app) path |
-| `GMAIL_TOKEN_FILE` | Where the OAuth refresh token is stored |
-| `GMAIL_SCOPES` | `gmail.readonly` (minimum scope) |
+| `JWT_SECRET_KEY` | Signing key for auth access tokens |
+| `CORS_ORIGINS` | Allowed frontend origins |
+| `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` | Web OAuth client (Google Cloud) |
+| `GMAIL_OAUTH_REDIRECT_URI` | `https://<backend>/api/v1/sync/gmail/callback` |
+| `FRONTEND_URL` | Where users return after authorizing Gmail |
+| `SMS_CLOUD_USERNAME` / `SMS_CLOUD_PASSWORD` | Android SMS Gateway cloud creds |
+| `SMS_WEBHOOK_PUBLIC_URL` | Public URL the phone delivers SMS batches to |
+| `SMS_WEBHOOK_SIGNING_KEY` | HMAC key for webhook authentication |
 | `PROVIDERS_CONFIG_FILE` | Path to `providers.yaml` |
 
-Secrets live under `backend/secrets/` and `backend/.env`, both gitignored.
+Secrets live under `backend/secrets/` and `backend/.env` — both gitignored.
 
 ---
 
-## Database schema
+## How it works
 
-**`transactions`** — one row per deduplicated financial transaction:
+### Deduplication
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | int PK | |
-| provider | str | HBL / ABL / NayaPay |
-| account_identifier | str? | masked, e.g. `****1234` |
-| transaction_type | str | `credit` \| `debit` |
-| amount | numeric(18,2) | |
-| currency | str(3) | default PKR |
-| transaction_datetime | timestamptz? | null if source omits |
-| merchant / description / reference | str? | null where unavailable |
-| balance_after | numeric? | if provided |
-| category | str? | from deterministic rules |
-| source_type | str | email/sms/statement/api/manual |
-| source_message_id / source_message_hash | str? | provenance |
-| raw_data | json? | non-sensitive parsed audit data |
-| **fingerprint** | str **unique** | dedup identity |
-| confidence | float | parser/reconciliation confidence |
-| verified | bool | corroborated by statement/multi-source |
-| created_at / updated_at | timestamptz | |
+A robust `fingerprint` — `provider + type + amount + currency + account_last4 +
+reference + rounded time bucket` — makes the same transaction collide across
+channels. Ingestion resolves to one of:
 
-**`transaction_sources`** — evidence per channel (email + SMS + statement can
-all point to one transaction):
+- `unique` → new transaction created
+- `exact_duplicate` → same fingerprint; attach the new source only
+- `probable_duplicate` → same money + time window; attach source, raise
+  confidence, and enrich blank fields (e.g. a generic statement row gains the
+  sender name from its matching email)
+- `needs_review` → similar but conflicting reference → **keep both**, flag
 
-`id, transaction_id→transactions, source_type, source_id, source_thread_id,
-received_at, raw_hash` with unique `(source_type, source_id)` and unique
-`raw_hash` (idempotency).
+Re-processing the same Gmail message or SMS is a no-op, guarded by unique
+`source_id` and `raw_hash`.
 
-**`gmail_sync_state`** — incremental sync checkpoints:
+### Cross-source reconciliation
 
-`id, provider (unique), last_history_id, last_sync_at`.
+The same real event is often captured twice: a rich real-time **email/SMS alert**
+(merchant, reference, exact time, no running balance) and the authoritative
+**statement line** (running balance, generic description, posting date). Because
+their dates and references differ, the fingerprint keeps both. A reconciliation
+pass matches them by reference (strong) or nearest time within a few days
+(fallback, same transaction kind), then keeps the statement row, enriches it from
+the alert, repoints the alert's source onto it, and drops the duplicate.
 
-Migrations are managed by Alembic (`alembic/versions/0001_initial.py`).
+### Analytics
+
+Balances and flows are computed from the normalized ledger: per-account balances
+anchor on the newest statement row with a running balance, income/expense flows
+exclude detected internal transfers, and a simple projection forecasts cash flow.
 
 ---
 
-## API endpoints
+## Deployment
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Liveness |
-| GET | `/health/db` | Readiness (DB connectivity) |
-| POST | `/api/v1/webhooks/sms` | Android SMS Gateway webhook (HMAC-authenticated) |
-| POST | `/api/v1/sync/gmail` | Trigger Gmail sync (dry-run preview until parsers implemented) |
-| GET | `/api/v1/transactions` | List + filter + paginate |
-| GET | `/api/v1/transactions/{id}` | Transaction detail with sources |
-| GET | `/api/v1/accounts` | Distinct provider/account pairs |
-| GET | `/api/v1/providers` | Configured providers + channels |
-| GET | `/api/v1/analytics/summary` | Income/expenses/net + provider breakdown |
-| GET | `/api/v1/analytics/monthly` | Monthly buckets |
-| GET | `/api/v1/export/csv` | CSV export |
-
-Filtering examples:
-
-```
-GET /api/v1/transactions?provider=HBL
-GET /api/v1/transactions?type=debit
-GET /api/v1/transactions?start_date=2026-01-01&end_date=2026-09-26
-GET /api/v1/transactions?category=Transport&limit=100&offset=0
-```
-
----
-
-## Gmail OAuth setup (read-only)
-
-1. In **Google Cloud Console**: create a project → enable the **Gmail API**.
-2. Configure the OAuth consent screen (External, add your own Google account as a
-   test user). Add scope `.../auth/gmail.readonly`.
-3. Create an **OAuth client ID** of type **Desktop app**; download the JSON.
-4. Save it to `backend/secrets/gmail_client_secret.json` (create the folder).
-5. Authorize once:
-   ```bash
-   cd backend && source .venv/bin/activate
-   python ../scripts/gmail_authorize.py
-   ```
-   A browser opens; consent with your account. The refresh token is stored at
-   `backend/secrets/gmail_token.json` (gitignored, `chmod 600`).
-6. Preview what would be ingested (safe, no writes yet):
-   ```bash
-   curl -X POST "http://localhost:8000/api/v1/sync/gmail?provider=hbl&dry_run=true"
-   ```
-   This lists `message_id / sender / subject / date / snippet` so you can confirm
-   sender/subject patterns before enabling parsing.
-
-Only `gmail.readonly` is requested. Your Gmail password is never handled.
-
----
-
-## Android SMS Gateway setup
-
-See **[android/documentation/SETUP.md](android/documentation/SETUP.md)** for the
-full guide. Summary:
-
-1. Install the [SMS Gateway APK](https://github.com/capcom6/android-sms-gateway/releases)
-   on the phone with your HBL SIM; grant **RECEIVE_SMS**.
-2. Enable **Local Server**, copy the **Signing Key** into
-   `SMS_WEBHOOK_SIGNING_KEY`.
-3. Expose the backend (ADB reverse for dev, or Cloudflare Tunnel/ngrok for
-   HTTPS).
-4. Register the webhook for `sms:received` → `.../api/v1/webhooks/sms`.
-5. Test with `python scripts/send_test_sms.py --key "$SMS_WEBHOOK_SIGNING_KEY"`.
-
-The webhook rejects any request without a valid HMAC signature.
+- **Backend** → Render (Docker). `render.yaml` is a ready blueprint; set
+  `DATABASE_URL` (Neon), `JWT_SECRET_KEY`, `CORS_ORIGINS`, and the Gmail/SMS
+  values in the dashboard.
+- **Database** → Neon (managed PostgreSQL); run `alembic upgrade head`.
+- **Frontend** → Vercel; set `VITE_API_URL` to the Render backend URL.
 
 ---
 
 ## Security model
 
-- **No secrets stored:** never passwords, OTPs, PINs, CVVs, or full card numbers.
-- **Minimal SMS retention:** raw SMS text is not persisted; only normalized
-  fields + a one-way hash for dedup. Unrelated SMS bodies are never logged.
-- **Gmail:** read-only OAuth, minimum scope, refresh token stored locally with
-  restricted permissions, never committed.
-- **Webhook auth:** mandatory HMAC-SHA256 with timestamp anti-replay.
-- **Database:** parameterized SQLAlchemy queries, unique fingerprint constraint,
-  Alembic migrations.
+- **No secrets stored** — never passwords, OTPs, PINs, CVVs, or full card numbers.
+- **Minimal SMS retention** — raw SMS text isn't persisted; only normalized
+  fields plus a one-way hash for dedup. Unrelated SMS are rejected by the parser.
+- **Gmail** — read-only OAuth, minimum scope (`gmail.readonly`); the refresh
+  token is stored per-user in the database, never committed.
+- **Webhook auth** — per-user signed token and/or HMAC-SHA256 with timestamp
+  anti-replay.
+- **Auth** — bcrypt password hashing, JWT access tokens.
+- **Database** — parameterized SQLAlchemy queries, unique fingerprint constraint,
+  Alembic-managed migrations.
 
 ---
 
-## Deduplication
+## Author
 
-A robust `fingerprint` (provider + type + amount + currency + account_last4 +
-reference + rounded time bucket) makes the same transaction collide across
-channels. Ingestion states:
+Built by **Danish Zulfiqar** — [github.com/danishzulfiqar](https://github.com/danishzulfiqar).
 
-- `unique` → new transaction created
-- `exact_duplicate` → same fingerprint; attach source only
-- `probable_duplicate` → same money/time window; attach source, raise confidence
-- `needs_review` → looks similar but conflicting reference → **keep both**, flag
-
-Ingestion is idempotent: re-processing the same Gmail/SMS message is a no-op
-(guarded by unique `source_id` and `raw_hash`).
-
----
-
-## Development phases
-
-- [x] **Phase 1 — Foundation:** FastAPI, PostgreSQL, SQLAlchemy, Alembic,
-      models, health, transactions API, Docker, webhook + Gmail scaffolding.
-- [ ] **Phase 2 — Gmail:** implement `hbl_email`, `abl_email`, `nayapay_email`
-      parsers from your real samples; enable non-dry-run sync + incremental
-      historyId checkpoints.
-- [ ] **Phase 3 — Android SMS:** finalize HBL SMS patterns from real samples.
-- [ ] **Phase 4 — Deduplication:** expand tests for cross-channel merges.
-- [ ] **Phase 5 — Dashboard:** React + Vite frontend.
-- [ ] **Phase 6 — Statements:** CSV/PDF importers + reconciliation.
-
----
-
-## What I need from you before implementing provider parsers
-
-The parsers are intentionally **stubs** (they return `None`) so nothing is
-misclassified. To implement them I need **anonymized** real samples — redact
-account numbers, names, and any codes; keep the structure/wording intact:
-
-1. **HBL bank-transfer email** — 1–2 examples (sender address, subject line,
-   body). Both a sent transfer and a received transfer if possible.
-2. **HBL card SMS** — 2–3 examples (a purchase, a refund/credit, and one with a
-   balance line if HBL includes it). Include the **sender ID** shown on the
-   phone (e.g. `HBL`).
-3. **ABL email** — 1–2 examples (credit and debit), with sender + subject.
-4. **NayaPay email** — 1–2 examples (e.g. money received and money sent), with
-   sender + subject.
-
-For each, please also confirm:
-- the **sender address / short code** as it actually appears,
-- the **subject pattern** (for emails),
-- how HBL/ABL/NayaPay indicate **credit vs debit** in wording,
-- the **date/time format** used,
-- whether a **reference/transaction ID** is present.
-
-Fill the real senders/patterns into `backend/providers.yaml` (placeholders are
-marked `REPLACE_WITH_...`). I'll then implement the parsers and their unit tests
-using your anonymized examples.
+A personal project for managing my own accounts. All figures in the code,
+tests, and UI are illustrative/synthetic.
