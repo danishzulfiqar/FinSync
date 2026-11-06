@@ -63,8 +63,8 @@ const NON_TRANSFER_CATEGORIES = new Set([
  * payment to a third party is never paired.
  *
  * A final self-name pass flags any lone transfer leg whose only named party is
- * the account holder ("RAAST P2P Danish Zulfiqar", "Received from Danish
- * Zulfiqar") — money moving to or from the user's own accounts even when the
+ * the account holder ("RAAST P2P Jane Doe", "Received from Jane Doe") —
+ * money moving to or from the user's own accounts even when the
  * opposite leg lives in an account FinSync doesn't track, so no pair exists to
  * match. Returns the ids of every flagged leg.
  */
@@ -120,7 +120,7 @@ export function detectInternalTransfers(
   // money moving between their own accounts, even when the opposite leg lives
   // in an account FinSync doesn't track (so there is no pair to match). Require
   // every name token to be present so a relative who shares a surname, or the
-  // word "Danish" inside an unrelated merchant name, is never swept in.
+  // word "Jane" inside an unrelated merchant name, is never swept in.
   if (self.size > 0) {
     for (const t of transactions) {
       if (matched.has(t.id) || !t.accountId || t.amount <= 0) continue;

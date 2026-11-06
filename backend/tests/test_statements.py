@@ -81,10 +81,10 @@ def test_clean_hbl_description_extracts_summary_and_counterparty() -> None:
 
     # Incoming transfer uses "from"; camel-cased names are split.
     summary, who = clean_hbl_description(
-        "FundsTransfer... TO DanishZulfiqarIBANXXXX-2023Thru Raast"
+        "FundsTransfer... TO TestUserIBANXXXX-1234Thru Raast"
     )
-    assert summary == "Transfer to Danish Zulfiqar (••••2023)"
-    assert who == "Danish Zulfiqar"
+    assert summary == "Transfer to Test User (••••1234)"
+    assert who == "Test User"
 
     # POS purchase: trailing text is the merchant, glued reference digits dropped.
     summary, who = clean_hbl_description(
@@ -316,9 +316,9 @@ def test_nayapay_describe_extracts_counterparty_and_bank() -> None:
 
 def test_nayapay_describe_incoming_and_card() -> None:
     incoming = _np_describe(
-        "Incoming fund transfer from Danish Zulfiqar HBL-5003 Transaction ID MBMB01", "+"
+        "Incoming fund transfer from Test User HBL-5003 Transaction ID MBMB01", "+"
     )
-    assert incoming["description"] == "Received from Danish Zulfiqar · HBL-5003"
+    assert incoming["description"] == "Received from Test User · HBL-5003"
 
     card = _np_describe("Paid to Google G1SK002M London GB Visa xxxx1234", "-")
     assert card["merchant"] == "Google G1SK002M London GB"
@@ -358,9 +358,9 @@ class _FakePDF:
 
 
 _NP_META_TEXT = (
-    "Account Statement\n01 Oct 2026 - 03 Oct 2026\nDanish Zulfiqar\n"
+    "Account Statement\n01 Oct 2026 - 03 Oct 2026\nTest User\n"
     "test.user@example.com\nNayaPay ID\n03001234567\nIBAN\n"
-    "PK49NAYA1234503001234567\n"
+    "PK00NAYA0000003001234567\n"
 )
 
 
@@ -373,10 +373,10 @@ def _nayapay_fake_pdf() -> _FakePDF:
         _w("01", 45, 30), _w("Oct", 63, 30), _w("2026", 82, 30),
         _w("Raast", 125, 30), _w("Out", 150, 30),
         _w("Outgoing", 205, 30), _w("fund", 235, 30), _w("transfer", 265, 30),
-        _w("to", 290, 30), _w("Muhammad", 315, 30), _w("Shahzad", 340, 30),
+        _w("to", 290, 30), _w("Alex", 315, 30), _w("Johnson", 340, 30),
         _w("-Rs.", 420, 30), _w("1,254", 455, 30),
         _w("Rs.", 505, 30), _w("746.00", 535, 30),
-        _w("12:57", 48, 45), _w("AM", 70, 45), _w("Kiani", 210, 45),
+        _w("12:57", 48, 45), _w("AM", 70, 45), _w("Lee", 210, 45),
         _w("easypaisa", 215, 60), _w("Bank-3049", 265, 60),
         _w("Transaction", 215, 75), _w("ID", 250, 75), _w("6abd69b53718b4393756aed0", 300, 75),
         _w("Service", 215, 90), _w("Charges", 255, 90), _w("Rs.", 285, 90), _w("0", 305, 90),
@@ -384,7 +384,7 @@ def _nayapay_fake_pdf() -> _FakePDF:
         _w("01", 45, 105), _w("Oct", 63, 105), _w("2026", 82, 105),
         _w("Raast", 125, 105), _w("In", 150, 105),
         _w("Incoming", 205, 105), _w("fund", 235, 105), _w("transfer", 265, 105),
-        _w("from", 290, 105), _w("Danish", 315, 105), _w("Zulfiqar", 340, 105),
+        _w("from", 290, 105), _w("Test", 315, 105), _w("User", 340, 105),
         _w("+Rs.", 420, 105), _w("5,000", 455, 105),
         _w("Rs.", 505, 105), _w("5,746.00", 535, 105),
         _w("10:29", 48, 120), _w("AM", 70, 120), _w("HBL-5003", 215, 120),
@@ -422,8 +422,8 @@ def test_parse_nayapay_end_to_end() -> None:
     stmt = _parse_nayapay(_nayapay_fake_pdf(), "nayapay.pdf")
     assert stmt.metadata["layout"] == "nayapay"
     assert stmt.metadata["account_number"] == "03001234567"
-    assert stmt.metadata["account_title"] == "Danish Zulfiqar"
-    assert stmt.metadata["iban"] == "PK49NAYA1234503001234567"
+    assert stmt.metadata["account_title"] == "Test User"
+    assert stmt.metadata["iban"] == "PK00NAYA0000003001234567"
     # Opening is reconstructed from the first row's balance and amount.
     assert Decimal(stmt.metadata["opening_balance"]) == Decimal("2000.00")
 
@@ -442,7 +442,7 @@ def test_parse_nayapay_end_to_end() -> None:
 
     assert t2.transaction_type is TransactionType.CREDIT
     assert t2.amount == Decimal("5000")
-    assert t2.description == "Received from Danish Zulfiqar · HBL-5003"
+    assert t2.description == "Received from Test User · HBL-5003"
 
     assert t3.description == "Paid to Google G1SK002M London GB"
     assert t3.account_identifier == "****1234"

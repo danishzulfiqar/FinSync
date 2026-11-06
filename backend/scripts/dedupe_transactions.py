@@ -20,7 +20,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.database import SessionLocal  # noqa: E402
-from app.services.maintenance import dedupe_statement_transactions  # noqa: E402
+from app.services.maintenance import (  # noqa: E402
+    dedupe_statement_balance_duplicates,
+    dedupe_statement_transactions,
+)
 
 
 def main() -> None:
@@ -35,6 +38,7 @@ def main() -> None:
     db = SessionLocal()
     try:
         result = dedupe_statement_transactions(db, dry_run=args.dry_run)
+        balance = dedupe_statement_balance_duplicates(db, dry_run=args.dry_run)
     finally:
         db.close()
 
@@ -45,13 +49,14 @@ def main() -> None:
     print(f"Found {result['duplicate_groups']} duplicated groups.\n")
     if args.dry_run:
         print(
-            f"[dry-run] Would remove {result['removed']} duplicate rows. "
-            "No changes made."
+            f"[dry-run] Would remove {result['removed']} fingerprint duplicates "
+            f"and {balance['removed']} balance duplicates. No changes made."
         )
     else:
         print(
-            f"Removed {result['removed']} duplicate rows; "
-            f"re-keyed {result['rekeyed']} survivors."
+            f"Removed {result['removed']} fingerprint duplicates "
+            f"(re-keyed {result['rekeyed']} survivors) and "
+            f"{balance['removed']} balance duplicates."
         )
 
 

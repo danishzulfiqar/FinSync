@@ -38,7 +38,7 @@ from app.models.account import Account  # noqa: E402
 from app.models.transaction import Transaction  # noqa: E402
 from app.models.transaction_source import TransactionSource  # noqa: E402
 
-USER_EMAIL = "test.user@example.com"  # the single owner of the data
+USER_EMAIL = os.environ.get("OWNER_EMAIL", "owner@example.com")  # single owner of the data
 TX_T = Transaction.__table__
 SRC_T = TransactionSource.__table__
 ACC_T = Account.__table__

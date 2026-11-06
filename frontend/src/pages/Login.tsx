@@ -26,8 +26,8 @@ export function Login() {
 
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("danish@finsync.pk");
-  const [password, setPassword] = useState("demo1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +140,7 @@ export function Login() {
                 label="Full name"
                 value={name}
                 onChange={setName}
-                placeholder="Danish Zulfiqar"
+                placeholder="Jane Doe"
                 type="text"
                 autoComplete="name"
               />

@@ -285,7 +285,7 @@ _HBL_BRAND_RE = re.compile(
 
 
 def _hbl_tidy_name(name: str) -> str:
-    name = _CAMEL_SPLIT_RE.sub(" ", name.strip(" -.'"))  # DanishZulfiqar -> Danish Zulfiqar
+    name = _CAMEL_SPLIT_RE.sub(" ", name.strip(" -.'"))  # JohnSmith -> John Smith
     return re.sub(r"\s+", " ", name).strip()
 
 
