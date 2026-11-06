@@ -24,8 +24,8 @@ from app.models.transaction import Transaction
 from app.models.transaction_source import TransactionSource  # noqa: F401
 from app.schemas.parsed import ParsedTransaction
 from app.services.ingestion.pipeline import ingest_parsed_transaction
+from app.services.maintenance import dedupe_statement_balance_duplicates
 from app.utils.fingerprint import raw_message_hash
-
 
 @pytest.fixture()
 def db():
@@ -122,3 +122,100 @@ def test_email_does_not_overwrite_existing_merchant(db) -> None:
 
     db.refresh(row)
     assert row.merchant == "Manually Named"
+
+
+def _balance_row(db, *, reference: str | None, dt: datetime, source_id: str) -> Transaction:
+    row = Transaction(
+        provider=Provider.HBL.value,
+        account_id=7,
+        account_identifier="HBL-5003",
+        transaction_type=TransactionType.CREDIT.value,
+        amount=Decimal("48796.18"),
+        currency="PKR",
+        transaction_datetime=dt,
+        balance_after=Decimal("90857.31"),
+        description="Funds transfer",
+        reference=reference,
+        source_type=SourceType.STATEMENT.value,
+        fingerprint=f"fp-{source_id}",
+        confidence=0.9,
+        user_id=1,
+    )
+    db.add(row)
+    db.flush()
+    db.add(
+        TransactionSource(
+            transaction_id=row.id,
+            source_type=SourceType.STATEMENT.value,
+            source_id=source_id,
+            raw_hash=f"hash-{source_id}",
+        )
+    )
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def test_balance_dedup_collapses_reimport_with_differing_reference(db) -> None:
+    """Same ledger line re-imported with a different reference/time -> one row."""
+    keeper = _balance_row(
+        db,
+        reference="07699408460989",
+        dt=datetime(2026, 5, 29, 0, 0, tzinfo=timezone.utc),
+        source_id="stmt-a-row5",
+    )
+    # Re-upload of an overlapping PDF: reference parsed as None, noon timestamp.
+    loser = _balance_row(
+        db,
+        reference=None,
+        dt=datetime(2026, 5, 29, 7, 0, tzinfo=timezone.utc),
+        source_id="stmt-b-row2",
+    )
+    assert keeper.fingerprint != loser.fingerprint  # fingerprint dedup missed them
+
+    result = dedupe_statement_balance_duplicates(db, user_id=1)
+
+    assert result["duplicate_groups"] == 1
+    assert result["removed"] == 1
+    remaining = db.query(Transaction).all()
+    assert len(remaining) == 1
+    # The richer row (carrying a reference) survives...
+    assert remaining[0].id == keeper.id
+    assert remaining[0].reference == "07699408460989"
+    # ...and the loser's source was repointed onto it (nothing lost).
+    source_ids = {s.source_id for s in remaining[0].sources}
+    assert source_ids == {"stmt-a-row5", "stmt-b-row2"}
+
+
+def test_balance_dedup_keeps_distinct_lines(db) -> None:
+    """Different running balances are different ledger lines -> never merged."""
+    _balance_row(
+        db,
+        reference="A",
+        dt=datetime(2026, 5, 29, 0, 0, tzinfo=timezone.utc),
+        source_id="row-1",
+    )
+    other = Transaction(
+        provider=Provider.HBL.value,
+        account_id=7,
+        account_identifier="HBL-5003",
+        transaction_type=TransactionType.CREDIT.value,
+        amount=Decimal("48796.18"),
+        currency="PKR",
+        transaction_datetime=datetime(2026, 5, 29, 0, 0, tzinfo=timezone.utc),
+        balance_after=Decimal("139653.49"),  # different running balance
+        description="Funds transfer",
+        reference="B",
+        source_type=SourceType.STATEMENT.value,
+        fingerprint="fp-other",
+        confidence=0.9,
+        user_id=1,
+    )
+    db.add(other)
+    db.commit()
+
+    result = dedupe_statement_balance_duplicates(db, user_id=1)
+
+    assert result["duplicate_groups"] == 0
+    assert result["removed"] == 0
+    assert db.query(Transaction).count() == 2

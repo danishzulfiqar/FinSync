@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from datetime import timedelta
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -75,7 +76,7 @@ def dedupe_statement_transactions(
                 for src in list(loser.sources):
                     if (src.source_type, src.source_id) in kept_sources:
                         continue  # keeper already has this evidence
-                    src.transaction_id = keeper.id
+                    keeper.sources.append(src)  # moves it off the loser (no cascade)
                     kept_sources.add((src.source_type, src.source_id))
                 db.delete(loser)
                 removed += 1
@@ -97,6 +98,84 @@ def dedupe_statement_transactions(
         "duplicate_groups": len(dup_groups),
         "removed": removed,
         "rekeyed": rekeyed,
+    }
+
+
+def _richest_statement_row(txs: list[Transaction]) -> Transaction:
+    """Pick the keeper: prefer a row that carries a reference, then the oldest id."""
+    with_ref = [t for t in txs if (t.reference or "").strip()]
+    pool = with_ref or txs
+    return min(pool, key=lambda t: t.id)
+
+
+def dedupe_statement_balance_duplicates(
+    db: Session,
+    *,
+    user_id: int | None = None,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Collapse statement rows that share a running balance.
+
+    A statement's printed running balance is unique to a line's position in the
+    ledger, so two rows in the same account with the same balance_after + amount
+    + type + currency + posting date are the *same* physical line re-imported
+    from an overlapping PDF. The fingerprint-based dedup misses these when the
+    reference parsed differently between imports (reference is part of the hash)
+    or the second import carried a date-only timestamp outside the time window.
+
+    The balance is authoritative: distinct postings in one account cannot share
+    the same running balance, so this merge never collapses genuinely different
+    transactions. Keeps the richest row (one carrying a reference, else the
+    oldest id) and repoints losers' sources onto it before deleting them.
+    """
+    query = select(Transaction).where(
+        Transaction.source_type == "statement",
+        Transaction.balance_after.is_not(None),
+    )
+    if user_id is not None:
+        query = query.where(Transaction.user_id == user_id)
+    rows = db.execute(query.order_by(Transaction.id)).scalars().all()
+
+    groups: dict[tuple, list[Transaction]] = defaultdict(list)
+    for tx in rows:
+        key = (
+            tx.user_id,
+            tx.account_id,
+            tx.transaction_type,
+            f"{Decimal(tx.amount):.2f}" if tx.amount is not None else "0",
+            (tx.currency or "PKR").upper(),
+            f"{Decimal(tx.balance_after):.2f}",
+            tx.transaction_datetime.date() if tx.transaction_datetime else None,
+        )
+        groups[key].append(tx)
+
+    dup_groups = {k: txs for k, txs in groups.items() if len(txs) > 1}
+    removed = 0
+
+    if not dry_run:
+        for txs in dup_groups.values():
+            keeper = _richest_statement_row(txs)
+            kept_sources = {(s.source_type, s.source_id) for s in keeper.sources}
+            for loser in txs:
+                if loser.id == keeper.id:
+                    continue
+                for src in list(loser.sources):
+                    if (src.source_type, src.source_id) in kept_sources:
+                        continue
+                    keeper.sources.append(src)  # moves it off the loser (no cascade)
+                    kept_sources.add((src.source_type, src.source_id))
+                db.delete(loser)
+                removed += 1
+            db.flush()
+        db.commit()
+    else:
+        removed = sum(len(txs) - 1 for txs in dup_groups.values())
+
+    return {
+        "scanned": len(rows),
+        "groups": len(groups),
+        "duplicate_groups": len(dup_groups),
+        "removed": removed,
     }
 
 
