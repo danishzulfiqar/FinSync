@@ -149,10 +149,35 @@ const HIGHLIGHTS = [
   },
 ];
 
-const PIPELINE = [
-  { icon: FileText, label: "PDF statements" },
-  { icon: Mail, label: "Gmail alerts" },
-  { icon: MessageSquare, label: "Bank SMS" },
+/** Providers and the channels each one speaks over — drives the arch diagram. */
+const PROVIDERS = [
+  { name: "ABL", sub: "Allied Bank", channels: ["Email"] },
+  { name: "HBL", sub: "Habib Bank", channels: ["Email", "SMS"] },
+  { name: "NayaPay", sub: "Wallet", channels: ["Email"] },
+];
+
+const OUTPUTS = [
+  { icon: FileText, label: "Excel export", sub: "download the ledger" },
+  { icon: LineChart, label: "Dashboard", sub: "balances & trends" },
+  { icon: Sparkles, label: "Analytics", sub: "insights & forecasts" },
+];
+
+const ARCH_STEPS = [
+  {
+    icon: Inbox,
+    title: "1 · Capture",
+    text: "Every bank speaks a different dialect — ABL and NayaPay over Gmail, HBL over both email and card SMS. Per-provider parsers turn each message into one normalized transaction shape.",
+  },
+  {
+    icon: Cpu,
+    title: "2 · Reconcile",
+    text: "A single ingestion choke point fingerprints every record, drops duplicates across channels, and merges the same purchase seen three ways into one row — the statement's running balance stays authoritative.",
+  },
+  {
+    icon: LineChart,
+    title: "3 · Use it",
+    text: "The deduplicated ledger in Postgres powers a one-click Excel export, a live dashboard and analytics with probabilistic balance forecasts.",
+  },
 ];
 
 const STACK = [
@@ -326,49 +351,196 @@ function SyncDemo() {
   );
 }
 
-/** Animated ingestion pipeline: sources flow into the ledger. */
-function PipelineDiagram() {
+/** A single node card in the architecture flow. */
+function FlowNode({
+  icon: Icon,
+  title,
+  sub,
+  primary = false,
+}: {
+  icon: typeof Wallet;
+  title: string;
+  sub: string;
+  primary?: boolean;
+}) {
   return (
-    <div className="relative rounded-2xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur sm:p-8">
-      <div className="grid gap-3 sm:grid-cols-3">
-        {PIPELINE.map((s, i) => (
-          <Reveal key={s.label} delay={i * 130} variant="reveal-scale">
-            <div className="flex items-center justify-center gap-2.5 rounded-xl border border-white/5 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
-              <s.icon className="h-4 w-4 text-brand-400" />
-              {s.label}
-            </div>
-          </Reveal>
-        ))}
+    <div
+      className={`group relative flex w-full max-w-sm items-center gap-3 rounded-2xl border px-5 py-4 backdrop-blur transition duration-300 hover:-translate-y-0.5 ${
+        primary
+          ? "border-brand-400/40 bg-brand-400/10 shadow-glow"
+          : "border-white/10 bg-slate-900/80 hover:border-brand-400/30 hover:shadow-glow"
+      }`}
+    >
+      {primary && (
+        <span className="pointer-events-none absolute -inset-px rounded-2xl ring-1 ring-brand-400/30 animate-pulse-dot" />
+      )}
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition duration-300 ${
+          primary
+            ? "bg-brand-400 text-slate-950"
+            : "border border-brand-400/20 bg-brand-400/10 text-brand-400 group-hover:scale-110 group-hover:bg-brand-400 group-hover:text-slate-950"
+        }`}
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="text-left">
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <p className="text-xs text-slate-400">{sub}</p>
       </div>
-      <Reveal delay={400}>
-        <div className="my-4 flex justify-center">
-          <ArrowDown className="h-5 w-5 animate-float text-brand-400/60" />
+    </div>
+  );
+}
+
+/** Straight connector between two full-width tiers, with a flowing data dot. */
+function Stem() {
+  return (
+    <svg
+      className="h-9 w-6"
+      viewBox="0 0 24 36"
+      fill="none"
+      aria-hidden
+      preserveAspectRatio="none"
+    >
+      <path
+        className="draw-path"
+        pathLength={1}
+        d="M12 0 V36"
+        stroke="#facc15"
+        strokeOpacity="0.5"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <circle r="2.4" fill="#facc15">
+        <animateMotion dur="1.8s" repeatCount="indefinite" path="M12 0 V36" />
+      </circle>
+    </svg>
+  );
+}
+
+/** Branching connector: one node fans out to three, or three fan into one. */
+function Branch({ direction }: { direction: "out" | "in" }) {
+  const out = [
+    "M150 2 C150 36 50 24 50 62",
+    "M150 2 V62",
+    "M150 2 C150 36 250 24 250 62",
+  ];
+  const inn = [
+    "M50 2 C50 36 150 24 150 62",
+    "M150 2 V62",
+    "M250 2 C250 36 150 24 150 62",
+  ];
+  const paths = direction === "out" ? out : inn;
+  return (
+    <svg
+      className="h-16 w-full"
+      viewBox="0 0 300 64"
+      fill="none"
+      aria-hidden
+      preserveAspectRatio="none"
+    >
+      {paths.map((d, i) => (
+        <g key={d}>
+          <path
+            className="draw-path"
+            pathLength={1}
+            style={{ transitionDelay: `${i * 140}ms` }}
+            d={d}
+            stroke="#facc15"
+            strokeOpacity="0.45"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <circle r="2.4" fill="#facc15">
+            <animateMotion
+              dur="2s"
+              repeatCount="indefinite"
+              begin={`${i * 0.3}s`}
+              path={d}
+            />
+          </circle>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/** Full top-down system architecture: accounts → channels → engine → DB → outputs. */
+function ArchitectureFlow() {
+  return (
+    <div className="relative mx-auto max-w-3xl">
+      <div className="pointer-events-none absolute inset-x-10 top-1/2 h-72 -translate-y-1/2 rounded-full bg-brand-400/5 blur-3xl" />
+      <div className="relative flex flex-col items-center">
+        <FlowNode
+          icon={Wallet}
+          title="Your accounts"
+          sub="one person · three banks"
+          primary
+        />
+        <Stem />
+        <Branch direction="out" />
+
+        {/* Providers + the channels each speaks over */}
+        <div className="grid w-full grid-cols-3 gap-2.5 sm:gap-4">
+          {PROVIDERS.map((p, i) => (
+            <Reveal key={p.name} delay={i * 120} variant="reveal-scale">
+              <div className="group h-full rounded-2xl border border-white/10 bg-slate-900/80 p-3 text-center backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-brand-400/30 hover:shadow-glow sm:p-4">
+                <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl border border-brand-400/20 bg-brand-400/10 text-brand-400 transition duration-300 group-hover:scale-110 group-hover:bg-brand-400 group-hover:text-slate-950">
+                  <Landmark className="h-4 w-4" />
+                </span>
+                <p className="mt-2 text-sm font-bold text-white">{p.name}</p>
+                <p className="hidden text-[11px] text-slate-500 sm:block">
+                  {p.sub}
+                </p>
+                <div className="mt-2 flex flex-wrap justify-center gap-1">
+                  {p.channels.map((c) => {
+                    const Icon = c === "SMS" ? MessageSquare : Mail;
+                    return (
+                      <span
+                        key={c}
+                        className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-slate-950/60 px-2 py-0.5 text-[10px] font-semibold text-slate-300"
+                      >
+                        <Icon className="h-3 w-3 text-brand-400" />
+                        {c}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            </Reveal>
+          ))}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="flex items-center justify-center gap-2.5 rounded-xl border border-white/5 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
-            <Fingerprint className="h-4 w-4 text-brand-400" />
-            Parsers + fingerprint dedup
-          </div>
-          <div className="flex items-center justify-center gap-2.5 rounded-xl border border-white/5 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
-            <ArrowLeftRight className="h-4 w-4 text-brand-400" />
-            Cross-source reconciliation
-          </div>
+
+        <Branch direction="in" />
+        <FlowNode
+          icon={Cpu}
+          title="Transaction engine"
+          sub="parse → fingerprint → dedup → reconcile"
+        />
+        <Stem />
+        <FlowNode
+          icon={Database}
+          title="SQLite / PostgreSQL"
+          sub="running balance = source of truth"
+        />
+        <Branch direction="out" />
+
+        {/* Outputs */}
+        <div className="grid w-full grid-cols-3 gap-2.5 sm:gap-4">
+          {OUTPUTS.map((o, i) => (
+            <Reveal key={o.label} delay={i * 120} variant="reveal-scale">
+              <div className="group h-full rounded-2xl border border-white/10 bg-slate-900/80 p-3 text-center backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-brand-400/30 hover:shadow-glow sm:p-4">
+                <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl border border-brand-400/20 bg-brand-400/10 text-brand-400 transition duration-300 group-hover:scale-110 group-hover:bg-brand-400 group-hover:text-slate-950">
+                  <o.icon className="h-4 w-4" />
+                </span>
+                <p className="mt-2 text-sm font-bold text-white">{o.label}</p>
+                <p className="hidden text-[11px] text-slate-500 sm:block">
+                  {o.sub}
+                </p>
+              </div>
+            </Reveal>
+          ))}
         </div>
-      </Reveal>
-      <Reveal delay={620}>
-        <div className="my-4 flex justify-center">
-          <ArrowDown className="h-5 w-5 animate-float text-brand-400/60" />
-        </div>
-        <div className="flex items-center justify-between rounded-xl border border-brand-400/30 bg-brand-400/10 px-5 py-4 shadow-glow">
-          <span className="flex items-center gap-3 text-sm font-semibold text-white">
-            <Database className="h-4 w-4 text-brand-400" />
-            One deduplicated ledger
-          </span>
-          <span className="text-xs text-slate-400">
-            balances · analytics · forecasts
-          </span>
-        </div>
-      </Reveal>
+      </div>
     </div>
   );
 }
@@ -499,39 +671,45 @@ export function Landing() {
 
       {/* Architecture / pipeline */}
       <section id="pipeline" className="border-t border-white/5 py-28">
-        <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 md:grid-cols-2">
-          <Reveal variant="reveal-left">
+        <div className="mx-auto max-w-5xl px-5">
+          <Reveal className="text-center">
             <p className="text-xs font-bold uppercase tracking-widest text-brand-400">
               Architecture
             </p>
-            <h2 className="mt-3 text-3xl font-bold leading-tight text-white sm:text-5xl">
-              Every source,
-              <br />
-              one pipeline.
+            <h2 className="mx-auto mt-3 max-w-2xl text-3xl font-bold leading-tight text-white sm:text-5xl">
+              Every source, one pipeline.
             </h2>
-            <p className="mt-5 leading-relaxed text-slate-400">
+            <p className="mx-auto mt-5 max-w-2xl leading-relaxed text-slate-400">
               Three very different inputs — PDF statements, Gmail alerts and
               bank SMS replayed from an Android gateway — converge on a single
               ingestion pipeline. Channel-specific parsers normalize each
               format; everything downstream is shared, so deduplication and
-              reconciliation rules exist exactly once.
+              reconciliation live in exactly one place before the clean ledger
+              fans out to exports, the dashboard and analytics.
             </p>
-            <ul className="mt-6 space-y-3 text-sm text-slate-300">
-              {[
-                "FastAPI backend, PostgreSQL ledger, React dashboard",
-                "Per-provider regex parsers built from real message samples",
-                "One ingestion choke point: fingerprint → dedup → persist",
-              ].map((t) => (
-                <li key={t} className="flex items-start gap-3">
-                  <Cpu className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
-                  {t}
-                </li>
-              ))}
-            </ul>
           </Reveal>
-          <Reveal variant="reveal-right" threshold={0.3}>
-            <PipelineDiagram />
+
+          <Reveal className="mt-16" threshold={0.12}>
+            <ArchitectureFlow />
           </Reveal>
+
+          <div className="mt-16 grid gap-5 sm:grid-cols-3">
+            {ARCH_STEPS.map((s, i) => (
+              <Reveal key={s.title} delay={(i % 3) * 110}>
+                <div className="h-full rounded-2xl border border-white/5 bg-slate-900/60 p-6 transition duration-300 hover:-translate-y-1 hover:border-brand-400/30 hover:shadow-glow">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-brand-400/20 bg-brand-400/10 text-brand-400">
+                    <s.icon className="h-5 w-5" />
+                  </span>
+                  <h3 className="mt-4 text-base font-semibold text-white">
+                    {s.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                    {s.text}
+                  </p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
         </div>
       </section>
 
