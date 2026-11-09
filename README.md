@@ -1,9 +1,35 @@
-# FinSync — One ledger from three noisy banks
+<div align="center">
 
-A personal-finance engineering project that unifies your own transactions from
-**Allied Bank**, **HBL**, and **NayaPay** — scattered across email alerts, card
-SMS, and PDF statements — into a single, deduplicated, categorized ledger with a
-dashboard, analytics, and forecasting.
+# FinSync
+
+### One honest ledger from three noisy banks.
+
+Unify your own transactions from **Allied Bank**, **HBL**, and **NayaPay** —
+scattered across email alerts, card SMS, and PDF statements — into a single,
+deduplicated, categorized ledger with a dashboard, analytics, and forecasting.
+
+<p>
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/FastAPI-0.11x-009688?logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/React-18-20232A?logo=react&logoColor=61DAFB" alt="React 18">
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind CSS">
+  <img src="https://img.shields.io/badge/tests-71_passing-success?logo=pytest&logoColor=white" alt="71 tests passing">
+</p>
+
+<p>
+  <a href="#live-demo"><b>Live demo</b></a> ·
+  <a href="#architecture"><b>Architecture</b></a> ·
+  <a href="#quick-start-local"><b>Quick start</b></a> ·
+  <a href="#how-it-works"><b>How it works</b></a>
+</p>
+
+</div>
+
+<p align="center">
+  <img src="frontend/public/shots/dashboard.png" alt="FinSync dashboard — balances, cash-flow and spending across every account" width="100%">
+</p>
 
 > **Authorized, read-only access to your own data.** FinSync uses the official
 > Gmail API (read-only OAuth) on your own inbox and the open-source
@@ -15,6 +41,49 @@ dashboard, analytics, and forecasting.
 This is a solo project built to solve a real problem: no single bank app shows
 the whole picture when money moves across three institutions and arrives through
 three different channels. FinSync is the engine that reconciles them.
+
+---
+
+## Live demo
+
+The landing page ships with a fully seeded **demo account** — click
+**“View live demo”** to explore a populated dashboard, ledger, and forecast
+without signing up.
+
+| | |
+|---|---|
+| **Email** | `demo@finsync.app` |
+| **Password** | `finsyncdemo` |
+
+> The demo is a shared, read-only-style sandbox pre-loaded with ~6 months of
+> synthetic transactions. All figures are illustrative.
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <b>Transactions</b> — one searchable, deduplicated ledger<br>
+      <img src="frontend/public/shots/transactions.png" alt="Unified transactions ledger with categories and running balances">
+    </td>
+    <td width="50%" valign="top">
+      <b>Predictions</b> — Monte-Carlo balance forecast<br>
+      <img src="frontend/public/shots/predictions.png" alt="Monte-Carlo cash-flow and balance forecast">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <b>Accounts</b> — balances reconciled to the rupee<br>
+      <img src="frontend/public/shots/accounts.png" alt="Accounts across HBL, ABL and NayaPay">
+    </td>
+    <td width="50%" valign="top">
+      <b>Categories</b> — spending grouped your way<br>
+      <img src="frontend/public/shots/categories.png" alt="Spending by category">
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -108,7 +177,7 @@ FinSync/
 │   │   │                        #   statement_pdf (+ base)
 │   │   └── utils/               # fingerprint, amount & date parsing
 │   ├── alembic/versions/        # migrations 0001–0006
-│   ├── tests/                   # 69 tests (parsers, dedup, reconciliation, auth…)
+│   ├── tests/                   # 71 tests (parsers, dedup, reconciliation, auth…)
 │   ├── scripts/                 # ops: dedupe, reclean, replicate, enrich, smoke
 │   ├── providers.yaml           # sender/pattern config + category rules
 │   ├── Dockerfile · .env.example
@@ -163,7 +232,7 @@ npm run dev                        # http://localhost:5173
 
 ```bash
 cd backend && source .venv/bin/activate
-pytest -q                          # 69 passing; parser/dedup tests need no DB
+pytest -q                          # 71 passing; parser/dedup tests need no DB
 ```
 
 ---
