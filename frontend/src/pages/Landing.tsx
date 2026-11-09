@@ -5,7 +5,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowDown,
   ArrowRight,
@@ -18,15 +18,22 @@ import {
   Inbox,
   Landmark,
   LineChart,
+  Loader2,
   Lock,
   Mail,
   MessageSquare,
+  PlayCircle,
   RefreshCw,
   ShieldCheck,
   Smartphone,
   Sparkles,
   Wallet,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+
+/** Public demo credentials (seeded by backend/scripts/seed_demo.py). */
+const DEMO_EMAIL = "demo@finsync.app";
+const DEMO_PASSWORD = "finsyncdemo";
 
 /* ----------------------------- motion primitives ---------------------------- */
 
@@ -545,11 +552,173 @@ function ArchitectureFlow() {
   );
 }
 
+/* ------------------------------- product tour ------------------------------- */
+
+const TOUR = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    url: "finsync.app/overview",
+    src: "/shots/dashboard.png",
+    blurb: "Every account, KPI and cash-flow trend unified on one overview.",
+  },
+  {
+    id: "transactions",
+    label: "Transactions",
+    url: "finsync.app/transactions",
+    src: "/shots/transactions.png",
+    blurb:
+      "A searchable, deduplicated ledger with inline categories and running balances.",
+  },
+  {
+    id: "predictions",
+    label: "Predictions",
+    url: "finsync.app/predictions",
+    src: "/shots/predictions.png",
+    blurb:
+      "A Monte-Carlo balance forecast learned from your own spending rhythm.",
+  },
+  {
+    id: "accounts",
+    label: "Accounts",
+    url: "finsync.app/accounts",
+    src: "/shots/accounts.png",
+    blurb: "Balances across HBL, ABL and NayaPay, reconciled to the rupee.",
+  },
+  {
+    id: "categories",
+    label: "Categories",
+    url: "finsync.app/categories",
+    src: "/shots/categories.png",
+    blurb: "Spending grouped the way you actually think about money.",
+  },
+];
+
+/** A mac-style browser chrome around a product screenshot. */
+function BrowserFrame({ src, url }: { src: string; url: string }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl ring-1 ring-black/40">
+      <div className="flex items-center gap-2 border-b border-white/10 bg-slate-950/80 px-4 py-3">
+        <span className="h-3 w-3 rounded-full bg-rose-400/80" />
+        <span className="h-3 w-3 rounded-full bg-amber-400/80" />
+        <span className="h-3 w-3 rounded-full bg-emerald-400/80" />
+        <div className="ml-3 flex flex-1 items-center justify-center">
+          <div className="flex items-center gap-2 rounded-md bg-white/5 px-3 py-1 text-[11px] text-slate-400">
+            <Lock className="h-3 w-3" />
+            {url}
+          </div>
+        </div>
+      </div>
+      <div className="aspect-[16/10] w-full overflow-hidden bg-slate-950">
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover object-top"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProductTour({
+  onDemo,
+  demoBusy,
+}: {
+  onDemo: () => void;
+  demoBusy: boolean;
+}) {
+  const [active, setActive] = useState(0);
+  const tab = TOUR[active];
+  return (
+    <section id="tour" className="border-t border-white/5 py-28">
+      <div className="mx-auto max-w-6xl px-5">
+        <Reveal className="text-center">
+          <p className="text-xs font-bold uppercase tracking-widest text-brand-400">
+            See it in action
+          </p>
+          <h2 className="mx-auto mt-3 max-w-2xl text-3xl font-bold leading-tight text-white sm:text-5xl">
+            The whole picture, beautifully.
+          </h2>
+          <p className="mx-auto mt-5 max-w-2xl leading-relaxed text-slate-400">
+            This is the real app, running on a seeded demo account. Click
+            through the surfaces below — then open the live demo and explore it
+            yourself.
+          </p>
+        </Reveal>
+
+        <Reveal delay={80} className="mt-10 flex flex-wrap justify-center gap-2">
+          {TOUR.map((t, i) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActive(i)}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                i === active
+                  ? "bg-brand-400 text-slate-950"
+                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </Reveal>
+
+        <Reveal delay={140} variant="reveal-scale" className="mt-8">
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-x-12 -bottom-10 h-40 rounded-full bg-brand-400/20 blur-3xl" />
+            <BrowserFrame key={tab.id} src={tab.src} url={tab.url} />
+          </div>
+          <p className="mt-6 text-center text-sm text-slate-400">{tab.blurb}</p>
+        </Reveal>
+
+        <Reveal delay={200} className="mt-10 flex justify-center">
+          <button
+            type="button"
+            onClick={onDemo}
+            disabled={demoBusy}
+            className="btn-primary px-6 py-3 text-base disabled:opacity-70"
+          >
+            {demoBusy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading demo…
+              </>
+            ) : (
+              <>
+                <PlayCircle className="h-4 w-4" />
+                Open the live demo
+              </>
+            )}
+          </button>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
 /* ---------------------------------- page ------------------------------------ */
 
 export function Landing() {
   const heroRef = useParallax<HTMLDivElement>();
   const [scrolled, setScrolled] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
+
+  async function openDemo() {
+    if (demoBusy) return;
+    setDemoBusy(true);
+    setDemoError(null);
+    try {
+      await login(DEMO_EMAIL, DEMO_PASSWORD);
+      navigate("/", { replace: true });
+    } catch {
+      setDemoError("The demo is warming up — please try again in a moment.");
+      setDemoBusy(false);
+    }
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -579,6 +748,9 @@ export function Landing() {
             </div>
           </div>
           <nav className="hidden items-center gap-7 text-sm font-medium text-slate-400 md:flex">
+            <a href="#tour" className="transition hover:text-white">
+              Live demo
+            </a>
             <a href="#pipeline" className="transition hover:text-white">
               Architecture
             </a>
@@ -592,10 +764,25 @@ export function Landing() {
               Stack
             </a>
           </nav>
-          <Link to="/login" className="btn-primary px-4 py-2 text-sm">
-            Open the app
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={openDemo}
+              disabled={demoBusy}
+              className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-60 sm:inline-flex"
+            >
+              {demoBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <PlayCircle className="h-4 w-4" />
+              )}
+              Live demo
+            </button>
+            <Link to="/login" className="btn-primary px-4 py-2 text-sm">
+              Open the app
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -633,17 +820,35 @@ export function Landing() {
             className="animate-fade-up mt-9 flex flex-wrap items-center justify-center gap-3"
             style={{ animationDelay: "270ms" }}
           >
-            <a href="#pipeline" className="btn-primary px-6 py-3 text-base">
+            <button
+              type="button"
+              onClick={openDemo}
+              disabled={demoBusy}
+              className="btn-primary px-6 py-3 text-base disabled:opacity-70"
+            >
+              {demoBusy ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading demo…
+                </>
+              ) : (
+                <>
+                  <PlayCircle className="h-4 w-4" />
+                  View live demo
+                </>
+              )}
+            </button>
+            <a
+              href="#pipeline"
+              className="btn border border-white/10 bg-white/5 px-6 py-3 text-base text-slate-200 hover:bg-white/10"
+            >
               See the architecture
               <ArrowDown className="h-4 w-4" />
             </a>
-            <Link
-              to="/login"
-              className="btn border border-white/10 bg-white/5 px-6 py-3 text-base text-slate-200 hover:bg-white/10"
-            >
-              Open the app
-            </Link>
           </div>
+          {demoError && (
+            <p className="animate-fade-up mt-3 text-sm text-rose-300">{demoError}</p>
+          )}
 
           {/* The problem */}
           <div
@@ -668,6 +873,9 @@ export function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Product tour */}
+      <ProductTour onDemo={openDemo} demoBusy={demoBusy} />
 
       {/* Architecture / pipeline */}
       <section id="pipeline" className="border-t border-white/5 py-28">
@@ -921,13 +1129,33 @@ export function Landing() {
             <p className="relative mx-auto mt-5 max-w-md text-slate-400">
               Statements, emails and SMS in — one trustworthy ledger out.
             </p>
-            <Link
-              to="/login"
-              className="btn-primary relative mt-9 px-7 py-3 text-base"
-            >
-              Open the app
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+            <div className="relative mt-9 flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={openDemo}
+                disabled={demoBusy}
+                className="btn-primary px-7 py-3 text-base disabled:opacity-70"
+              >
+                {demoBusy ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading demo…
+                  </>
+                ) : (
+                  <>
+                    <PlayCircle className="h-4 w-4" />
+                    Explore the live demo
+                  </>
+                )}
+              </button>
+              <Link
+                to="/login"
+                className="btn border border-white/10 bg-white/5 px-7 py-3 text-base text-slate-200 hover:bg-white/10"
+              >
+                Open the app
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </Reveal>
         </div>
       </section>
