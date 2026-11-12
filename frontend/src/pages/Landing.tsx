@@ -31,10 +31,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
-/** Public demo credentials (seeded by backend/scripts/seed_demo.py). */
-const DEMO_EMAIL = "demo@finsync.app";
-const DEMO_PASSWORD = "finsyncdemo";
-
 /* ----------------------------- motion primitives ---------------------------- */
 
 /** Adds `.is-visible` when the element enters the viewport (once). */
@@ -702,22 +698,16 @@ function ProductTour({
 export function Landing() {
   const heroRef = useParallax<HTMLDivElement>();
   const [scrolled, setScrolled] = useState(false);
-  const { login } = useAuth();
+  const { loginDemo } = useAuth();
   const navigate = useNavigate();
   const [demoBusy, setDemoBusy] = useState(false);
-  const [demoError, setDemoError] = useState<string | null>(null);
 
-  async function openDemo() {
+  function openDemo() {
     if (demoBusy) return;
     setDemoBusy(true);
-    setDemoError(null);
-    try {
-      await login(DEMO_EMAIL, DEMO_PASSWORD);
-      navigate("/", { replace: true });
-    } catch {
-      setDemoError("The demo is warming up — please try again in a moment.");
-      setDemoBusy(false);
-    }
+    // Demo loads from a bundled snapshot — instant, no backend round-trip.
+    loginDemo();
+    navigate("/", { replace: true });
   }
 
   useEffect(() => {
@@ -846,9 +836,6 @@ export function Landing() {
               <ArrowDown className="h-4 w-4" />
             </a>
           </div>
-          {demoError && (
-            <p className="animate-fade-up mt-3 text-sm text-rose-300">{demoError}</p>
-          )}
 
           {/* The problem */}
           <div
