@@ -701,14 +701,22 @@ export function Landing() {
   const { loginDemo } = useAuth();
   const navigate = useNavigate();
   const [demoBusy, setDemoBusy] = useState(false);
+  const demoTimer = useRef<number | null>(null);
 
   function openDemo() {
     if (demoBusy) return;
     setDemoBusy(true);
-    // Demo loads from a bundled snapshot — instant, no backend round-trip.
-    loginDemo();
-    navigate("/", { replace: true });
+    // Data is bundled (instant); hold briefly so the loading state reads as a
+    // deliberate, premium transition rather than a jarring jump.
+    demoTimer.current = window.setTimeout(() => {
+      loginDemo();
+      navigate("/", { replace: true });
+    }, 850);
   }
+
+  useEffect(() => () => {
+    if (demoTimer.current !== null) window.clearTimeout(demoTimer.current);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
