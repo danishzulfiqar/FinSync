@@ -36,6 +36,11 @@ import {
 import { setAmountMasking } from "../lib/format";
 import { useDelayedFlag } from "../lib/hooks";
 import { useAuth } from "./AuthContext";
+import {
+  DEMO_ACCOUNTS,
+  DEMO_PREFERENCES,
+  DEMO_TRANSACTIONS,
+} from "../data/demo";
 
 export interface NewAccountInput {
   name: string;
@@ -149,7 +154,7 @@ async function fetchAllTransactions(): Promise<TransactionOut[]> {
 }
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, initializing, user } = useAuth();
+  const { isAuthenticated, initializing, user, isDemo } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [rawTransactions, setRawTransactions] = useState<Transaction[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -209,11 +214,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const connectGmail = useCallback(async () => {
+    if (isDemo) return;
     const { url } = await api.get<{ url: string }>("/sync/gmail/authorize");
     window.location.href = url;
-  }, []);
+  }, [isDemo]);
 
   const refresh = useCallback(async () => {
+    // Demo mode reads a bundled snapshot — instant, no backend round-trip.
+    if (isDemo) {
+      setAccounts(DEMO_ACCOUNTS.map(mapAccount));
+      setRawTransactions(sortNewestFirst(DEMO_TRANSACTIONS.map(mapTransaction)));
+      setSettings(fromPrefs(DEMO_PREFERENCES));
+      setGmail({ connected: false, providers: [] });
+      setSms({ configured: false, latest_hbl_sms_at: null });
+      setError(null);
+      setLoading(false);
+      setReady(true);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -236,7 +254,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     // Non-blocking: inbox/gateway status shouldn't delay the dashboard.
     void refreshGmailStatus();
     void refreshSmsStatus();
-  }, [refreshGmailStatus, refreshSmsStatus]);
+  }, [isDemo, refreshGmailStatus, refreshSmsStatus]);
 
   useEffect(() => {
     if (initializing) return;
@@ -255,6 +273,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const addAccount = useCallback(
     async (input: NewAccountInput): Promise<Account> => {
+      if (isDemo) {
+        const account = mapAccount({
+          id: Date.now(),
+          name: input.name,
+          provider: input.provider,
+          type: input.type,
+          mask: input.mask,
+          opening_balance: input.openingBalance,
+          currency: "PKR",
+          color: input.color,
+          is_active: true,
+          created_at: new Date().toISOString(),
+        });
+        setAccounts((prev) => [...prev, account]);
+        return account;
+      }
       const created = await api.post<AccountOut>(
         "/accounts",
         toAccountPayload(input)
@@ -263,11 +297,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setAccounts((prev) => [...prev, account]);
       return account;
     },
-    []
+    [isDemo]
   );
 
   const setAccountActive = useCallback(
     async (id: string, active: boolean) => {
+      if (isDemo) {
+        setAccounts((prev) =>
+          prev.map((a) => (a.id === id ? { ...a, isActive: active } : a))
+        );
+        return;
+      }
       const before = accounts;
       setAccounts((prev) =>
         prev.map((a) => (a.id === id ? { ...a, isActive: active } : a))
@@ -279,7 +319,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    [accounts]
+    [accounts, isDemo]
   );
 
   const importTransactions = useCallback(async () => {
@@ -299,6 +339,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setRawTransactions((prev) =>
         prev.map((t) => (sameMerchant(t) ? { ...t, categoryId } : t))
       );
+      if (isDemo) return;
       try {
         const updated = await api.patch<TransactionOut>(
           `/transactions/${id}`,
@@ -311,11 +352,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         void refresh();
       }
     },
-    [categories, rawTransactions, refresh]
+    [categories, rawTransactions, refresh, isDemo]
   );
 
   const updateSettings = useCallback(
     async (patch: Partial<Settings>) => {
+      if (isDemo) {
+        setSettings((prev) => ({ ...prev, ...patch }));
+        return;
+      }
       const before = settings;
       setSettings((prev) => ({ ...prev, ...patch }));
       try {
@@ -326,11 +371,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    [settings]
+    [settings, isDemo]
   );
 
   const syncGmail = useCallback(
     async (opts: GmailSyncOptions = {}): Promise<GmailSyncResponse> => {
+      if (isDemo) {
+        return { status: "ok", dry_run: !!opts.dryRun, totals: {}, providers: [] };
+      }
       const params = new URLSearchParams();
       if (opts.provider) params.set("provider", opts.provider);
       if (opts.dryRun) params.set("dry_run", "true");
@@ -351,10 +399,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setGmailSyncing(false);
       }
     },
-    [refresh, refreshGmailStatus]
+    [refresh, refreshGmailStatus, isDemo]
   );
 
   const syncSms = useCallback(async (): Promise<SmsSyncResponse> => {
+    if (isDemo) {
+      return { status: "ok", since: "", until: "", detail: "Demo mode" };
+    }
     setSmsSyncing(true);
     try {
       const result = await api.post<SmsSyncResponse>("/sms/sync");
@@ -366,7 +417,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setSmsSyncing(false);
     }
-  }, [refresh]);
+  }, [refresh, isDemo]);
 
   const value = useMemo<AppDataContextValue>(
     () => ({
