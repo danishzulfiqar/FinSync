@@ -28,7 +28,11 @@ deduplicated, categorized ledger with a dashboard, analytics, and forecasting.
 </div>
 
 <p align="center">
-  <img src="frontend/public/shots/dashboard.png" alt="FinSync dashboard — balances, cash-flow and spending across every account" width="100%">
+  <a href="https://finsync-green.vercel.app">
+    <img src="docs/finsync-demo.gif" alt="FinSync demo — one click into the live demo, search the unified ledger, explore the forecast" width="100%">
+  </a>
+  <br>
+  <sub><b><a href="https://finsync-green.vercel.app">Try the live demo →</a></b> · no signup required</sub>
 </p>
 
 > **Authorized, read-only access to your own data.** FinSync uses the official
@@ -46,7 +50,7 @@ three different channels. FinSync is the engine that reconciles them.
 
 ## Live demo
 
-The landing page ships with a fully seeded **demo account** — click
+The [landing page](https://finsync-green.vercel.app) ships with a fully seeded **demo account** — click
 **“View live demo”** to explore a populated dashboard, ledger, and forecast
 without signing up.
 
