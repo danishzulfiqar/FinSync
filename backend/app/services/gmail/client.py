@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import base64
 import logging
+import random
 import re
 import time
+from collections import deque
+from collections.abc import Callable, Iterable, Iterator
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
@@ -24,6 +27,7 @@ from html import unescape
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from app.config import get_settings
 from app.parsers.base import EmailMessage
 from app.services.gmail.oauth import load_credentials, load_user_credentials
 
@@ -32,33 +36,94 @@ logger = logging.getLogger(__name__)
 # Statuses worth retrying: Gmail rate limiting (403 rateLimitExceeded / 429)
 # and transient server errors.
 _TRANSIENT_STATUSES = {429, 500, 502, 503}
+_MAX_BACKOFF_SECONDS = 32.0
+_MAX_BATCH_SIZE = 100  # hard API limit per batch request
+
+# Per-method quota costs: https://developers.google.com/workspace/gmail/api/reference/quota
+UNITS_MESSAGES_LIST = 5
+UNITS_MESSAGES_GET_FULL = 60
+
+
+class QuotaLimiter:
+    """Sliding-window limiter for Gmail's per-user, per-minute quota units.
+
+    Share one instance across a whole sync so every call (list + get, all
+    providers) draws from the same budget.
+    """
+
+    def __init__(
+        self,
+        units_per_minute: int,
+        *,
+        window_seconds: float = 60.0,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        if units_per_minute <= 0:
+            raise ValueError("units_per_minute must be positive")
+        self.capacity = units_per_minute
+        self._window = window_seconds
+        self._clock = clock
+        self._sleep = sleep
+        self._spent: deque[tuple[float, int]] = deque()
+        self._used = 0
+
+    def acquire(self, units: int) -> None:
+        """Block until ``units`` fit in the rolling window, then reserve them."""
+        if units > self.capacity:
+            raise ValueError(
+                f"request needs {units} quota units but the budget is "
+                f"{self.capacity}/min; raise GMAIL_QUOTA_UNITS_PER_MINUTE"
+            )
+        while True:
+            now = self._clock()
+            while self._spent and now - self._spent[0][0] >= self._window:
+                self._used -= self._spent.popleft()[1]
+            if self._used + units <= self.capacity:
+                self._spent.append((now, units))
+                self._used += units
+                return
+            wait = self._spent[0][0] + self._window - now
+            logger.info("Gmail quota budget reached, pausing %.1fs", wait)
+            self._sleep(wait)
+
+
+def new_quota_limiter() -> QuotaLimiter:
+    return QuotaLimiter(get_settings().gmail_quota_units_per_minute)
+
+
+def _status(exc: HttpError) -> int:
+    return int(getattr(exc.resp, "status", 0) or 0)
+
+
+def _is_retryable(exc: HttpError) -> bool:
+    status = _status(exc)
+    content = exc.content or b""
+    is_rate_limited = status == 403 and (
+        b"rateLimitExceeded" in content or b"userRateLimitExceeded" in content
+    )
+    return is_rate_limited or status in _TRANSIENT_STATUSES
+
+
+def _backoff_seconds(attempt: int) -> float:
+    """Truncated exponential backoff with jitter, as Google recommends."""
+    return min(2.0**attempt + random.random(), _MAX_BACKOFF_SECONDS)
 
 
 def _execute(request, *, max_retries: int = 6):
-    """Execute a Gmail API request, retrying on rate-limit/transient errors.
-
-    Gmail allows only ~250 quota units per user per minute, so a burst of
-    ``messages.get`` calls can hit ``403 rateLimitExceeded``. Back off
-    exponentially instead of failing the whole sync.
-    """
-    delay = 1.0
+    """Execute a Gmail API request, retrying on rate-limit/transient errors."""
     for attempt in range(max_retries + 1):
         try:
             return request.execute()
         except HttpError as exc:
-            status = int(getattr(exc.resp, "status", 0) or 0)
-            content = exc.content or b""
-            is_rate_limited = status == 403 and (
-                b"rateLimitExceeded" in content or b"userRateLimitExceeded" in content
-            )
-            if attempt >= max_retries or not (is_rate_limited or status in _TRANSIENT_STATUSES):
+            if attempt >= max_retries or not _is_retryable(exc):
                 raise
+            delay = _backoff_seconds(attempt)
             logger.warning(
                 "Gmail API %s, backing off %.1fs (attempt %d/%d)",
-                status, delay, attempt + 1, max_retries,
+                _status(exc), delay, attempt + 1, max_retries,
             )
             time.sleep(delay)
-            delay = min(delay * 2, 30.0)
 
 
 def build_service(db=None, user_id=None):
@@ -92,7 +157,13 @@ def build_query(senders: list[str], after: str | None = None, before: str | None
     return " ".join(parts)
 
 
-def list_message_ids(service, query: str, max_results: int | None = None) -> list[str]:
+def list_message_ids(
+    service,
+    query: str,
+    max_results: int | None = None,
+    *,
+    limiter: QuotaLimiter | None = None,
+) -> list[str]:
     """List message ids matching a query, following pagination.
 
     ``max_results=None`` walks every page so no matching message is dropped
@@ -103,6 +174,8 @@ def list_message_ids(service, query: str, max_results: int | None = None) -> lis
     page_token: str | None = None
     while True:
         page_size = 500 if max_results is None else min(max_results, 500)
+        if limiter is not None:
+            limiter.acquire(UNITS_MESSAGES_LIST)
         resp = _execute(
             service.users()
             .messages()
@@ -122,6 +195,92 @@ def fetch_email(service, message_id: str) -> EmailMessage:
         .messages()
         .get(userId="me", id=message_id, format="full")
     )
+    return _to_email(msg)
+
+
+def fetch_emails(
+    service,
+    message_ids: Iterable[str],
+    *,
+    limiter: QuotaLimiter | None = None,
+    batch_size: int | None = None,
+    max_retries: int = 6,
+) -> Iterator[EmailMessage]:
+    """Fetch many messages via batch requests, yielding them in input order.
+
+    Each batch is one HTTP round trip for up to ``batch_size`` messages, paced
+    by ``limiter`` so the per-user quota is never exceeded. Inside a batch every
+    message succeeds or fails independently: rate-limited/transient ones are
+    retried with backoff, messages deleted since listing (404) are skipped, and
+    any other error is raised.
+    """
+    limiter = limiter or new_quota_limiter()
+    size = batch_size or get_settings().gmail_batch_size
+    size = max(1, min(size, _MAX_BATCH_SIZE, limiter.capacity // UNITS_MESSAGES_GET_FULL))
+    ids = list(dict.fromkeys(message_ids))  # batch request ids must be unique
+    for start in range(0, len(ids), size):
+        chunk = ids[start:start + size]
+        fetched = _fetch_batch(service, chunk, limiter, max_retries)
+        for mid in chunk:
+            if mid in fetched:
+                yield _to_email(fetched[mid])
+
+
+def _fetch_batch(
+    service, ids: list[str], limiter: QuotaLimiter, max_retries: int
+) -> dict[str, dict]:
+    fetched: dict[str, dict] = {}
+    pending = ids
+    for attempt in range(max_retries + 1):
+        retry: list[str] = []
+        failures: list[HttpError] = []
+        last_error: HttpError | None = None
+
+        def on_response(request_id: str, response: dict, exception: HttpError | None) -> None:
+            nonlocal last_error
+            if exception is None:
+                fetched[request_id] = response
+            elif _status(exception) == 404:
+                logger.info("Gmail message %s no longer exists, skipping", request_id)
+            elif _is_retryable(exception):
+                retry.append(request_id)
+                last_error = exception
+            else:
+                failures.append(exception)
+
+        batch = service.new_batch_http_request(callback=on_response)
+        for mid in pending:
+            batch.add(
+                service.users().messages().get(userId="me", id=mid, format="full"),
+                request_id=mid,
+            )
+        limiter.acquire(UNITS_MESSAGES_GET_FULL * len(pending))
+        try:
+            batch.execute()
+        except HttpError as exc:  # the outer batch request itself failed
+            if not _is_retryable(exc):
+                raise
+            retry = [mid for mid in pending if mid not in fetched]
+            last_error = exc
+
+        if failures:
+            raise failures[0]
+        if not retry:
+            return fetched
+        if attempt >= max_retries:
+            assert last_error is not None
+            raise last_error
+        delay = _backoff_seconds(attempt)
+        logger.warning(
+            "Gmail batch: %d/%d messages throttled, retrying in %.1fs (attempt %d/%d)",
+            len(retry), len(pending), delay, attempt + 1, max_retries,
+        )
+        time.sleep(delay)
+        pending = retry
+    return fetched
+
+
+def _to_email(msg: dict) -> EmailMessage:
     headers = {
         h["name"].lower(): h["value"] for h in msg.get("payload", {}).get("headers", [])
     }
