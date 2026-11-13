@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     gmail_oauth_redirect_uri: str = "http://localhost:8000/api/v1/sync/gmail/callback"
     # Where the backend sends the browser back to once authorization completes.
     frontend_url: str = ""
+    # Per-user Gmail quota budget. Google's limit is 6,000 units/user/minute for
+    # projects created after May 2026; keep headroom. Raise on legacy-quota projects.
+    gmail_quota_units_per_minute: int = 5000
+    # Messages per batch HTTP request (Google recommends <= 50).
+    gmail_batch_size: int = 50
 
     # Providers config
     providers_config_file: str = "providers.yaml"
