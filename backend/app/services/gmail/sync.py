@@ -24,7 +24,12 @@ from app.models.gmail_sync_state import GmailSyncState
 from app.models.transaction import Transaction
 from app.models.transaction_source import TransactionSource
 from app.parsers import get_email_parser
-from app.services.gmail.client import build_query, fetch_email, list_message_ids
+from app.services.gmail.client import (
+    build_query,
+    fetch_emails,
+    list_message_ids,
+    new_quota_limiter,
+)
 from app.services.ingestion.pipeline import ingest_parsed_transaction
 from app.utils.fingerprint import raw_message_hash
 
@@ -70,6 +75,7 @@ def sync_user_gmail(
         ]
 
     results: list[ProviderSyncResult] = []
+    limiter = new_quota_limiter()  # one per-user quota budget across all providers
     for key in keys:
         cfg = config.provider(key)
         parser = get_email_parser(key)
@@ -79,7 +85,7 @@ def sync_user_gmail(
         provider_enum = Provider[key.upper()]
         after = start_date or _latest_date(db, user_id, provider_enum.value)
         query = build_query(cfg.email_senders, after=after, before=before)
-        ids = list_message_ids(service, query, max_results=max_results)
+        ids = list_message_ids(service, query, max_results=max_results, limiter=limiter)
 
         # Emails already ingested in a previous sync are keyed by their Gmail
         # message id. Skipping them here means the 45-day re-scan window costs
@@ -88,11 +94,11 @@ def sync_user_gmail(
         already = _already_ingested_ids(db, user_id)
 
         result = ProviderSyncResult(provider=key, query=query, after=after, matched=len(ids))
-        for mid in ids:
-            if mid in already:
-                result.skipped += 1
-                continue
-            email = fetch_email(service, mid)
+        pending = [mid for mid in ids if mid not in already]
+        result.skipped += len(ids) - len(pending)
+        fetched = 0
+        for email in fetch_emails(service, pending, limiter=limiter):
+            fetched += 1
             parsed = parser.parse(email)
             if parsed is None:
                 result.skipped += 1
@@ -142,6 +148,7 @@ def sync_user_gmail(
             )
             _tally(result, outcome.status)
 
+        result.skipped += len(pending) - fetched  # deleted between list and fetch
         if not dry_run:
             result.adopted = _adopt_orphans(db, user_id, key, provider_enum.value)
             _touch_sync_state(db, key)
